@@ -1,8 +1,9 @@
 import torch
-from torch import nn
-from parameters import eps
+from torch import nn, Tensor
+from parameters import DATA_SAMPLES, crit_threshold, eps
 import numpy as np
 from PIL import Image
+import random
 
 
 def to_np(x):
@@ -32,6 +33,37 @@ def prepare_rgb_image(img_array): # numpy_array
     image = Image.fromarray(img_array, mode='RGB')
 
     return img_array, image
+
+def get_critic_labels(preds):
+    labels = []
+    for pred_value in preds:
+        if pred_value >= crit_threshold:
+            classification = (0, 1)
+        else:
+            classification = (1, 0)
+
+        labels.append(classification)
+
+    return Tensor(labels)
+
+# source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
+def load_minerl_data(data):
+    print("loading minerl-data...")
+    trajectory_names = data.get_trajectory_names()
+    random.shuffle(trajectory_names)
+
+    all_pov_obs = []
+    # Add trajectories to the data until we reach the required DATA_SAMPLES.
+    for trajectory_name in trajectory_names:
+        trajectory = data.load_data(trajectory_name, skip_interval=0, include_metadata=False)
+        for dataset_observation, _, _, _, _ in trajectory:
+            all_pov_obs.append(dataset_observation["pov"])
+        if len(all_pov_obs) >= DATA_SAMPLES:
+            break
+
+    all_pov_obs = np.array(all_pov_obs)
+
+    return all_pov_obs
 
 # Not fully mine. Some parts taken from another lecture.
 # Tune min/max parameters if needed.
