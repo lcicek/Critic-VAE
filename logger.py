@@ -34,7 +34,6 @@ class Logger(object):
             if SAVE_IMAGES:
                 img.save(f'{SAVE_PATH}/{tag}-{i}-{step}.png', format="png")
 
-
             if labels is None:
                 self.writer.add_image(tag='%s/%d/%d' % (tag, step, i), img_tensor=img_array, dataformats='HWC')
             else:

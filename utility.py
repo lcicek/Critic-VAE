@@ -1,6 +1,6 @@
 import torch
 from torch import nn, Tensor
-from parameters import DATA_SAMPLES, crit_threshold, eps
+from parameters import BATCH_SIZE, DATA_SAMPLES, crit_threshold, eps
 import numpy as np
 from PIL import Image
 import random
@@ -38,13 +38,13 @@ def get_critic_labels(preds):
     labels = []
     for pred_value in preds:
         if pred_value >= crit_threshold:
-            classification = (0, 1)
+            label = 1
         else:
-            classification = (1, 0)
+            label = 0
 
-        labels.append(classification)
+        labels.append(label)
 
-    return Tensor(labels)
+    return torch.as_tensor(labels)
 
 # source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
 def load_minerl_data(data):
@@ -59,6 +59,9 @@ def load_minerl_data(data):
         for dataset_observation, _, _, _, _ in trajectory:
             all_pov_obs.append(dataset_observation["pov"])
         if len(all_pov_obs) >= DATA_SAMPLES:
+            length = len(all_pov_obs)
+            excess = length % BATCH_SIZE
+            all_pov_obs = all_pov_obs[:length-excess] # cut off excess
             break
 
     all_pov_obs = np.array(all_pov_obs)
