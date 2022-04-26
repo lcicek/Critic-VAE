@@ -13,7 +13,7 @@ from nets import Q_net, P_net, D_net
 from logger import Logger
 from parameters import (
     NUM_CLASSES, BATCH_SIZE, TRAIN, AUTOCAST,
-    n_channels, eps, n, z_dim, total_step, collect, log_count
+    n_channels, eps, style_dim, n, z_dim, total_step, collect, log_count
 )
 
 # Dataset 
@@ -39,17 +39,20 @@ with torch.no_grad():
     Q.train()
 
 P = P_net(X_dim=n_channels, N=n, z_dim=z_dim, inner_shape=shape).cuda()
-D_gauss = D_net(32, NUM_CLASSES).cuda()
+D_gauss = D_net(32, style_dim).cuda()
+D_cat = D_net(32, NUM_CLASSES).cuda()
 
 with torch.no_grad():
     Q.eval()
-    class_out, z_sample = Q.custom_forward(torch.zeros((BATCH_SIZE, n_channels, 32, 32)).cuda())
-    _ = P(z_sample)
-    _ = D_gauss(class_out)
+    class_out, style, combined = Q(torch.zeros((BATCH_SIZE, n_channels, 32, 32)).cuda())
+    _ = P(combined)
+    _ = D_gauss(style)
+    _ = D_cat(class_out)
     Q.train()
     init_weights(Q)
     init_weights(P)
     init_weights(D_gauss)
+    init_weights(D_cat)
 
 if TRAIN:
     # Set learning rates
@@ -65,10 +68,12 @@ if TRAIN:
     
     #regularizing optimizers
     optim_Q_gen = optimizer_class(Q.parameters(), lr=reg_lr, momentum=0.1) # Generator
-    optim_D_gauss = optimizer_class(D_gauss.parameters(), lr=reg_lr, momentum=0.1) # Discriminator classification
+    optim_D_gauss = optimizer_class(D_gauss.parameters(), lr=reg_lr, momentum=0.1) # Discriminator style
+    optim_D_cat = optimizer_class(D_cat.parameters(), lr=reg_lr, momentum=0.1) # Discriminator classification
 
     scheduler1 = torch.optim.lr_scheduler.ConstantLR(optim_Q_gen, factor=eps, total_iters=1000)
     scheduler2 = torch.optim.lr_scheduler.ConstantLR(optim_D_gauss, factor=eps, total_iters=1000)
+    scheduler3 = torch.optim.lr_scheduler.ConstantLR(optim_D_cat, factor=eps, total_iters=1000)
     
     if AUTOCAST:
         scaler_Q_enc = GradScaler()
@@ -109,11 +114,13 @@ if TRAIN:
         #regularizing optimizers
         optim_Q_gen.zero_grad()
         optim_D_gauss.zero_grad()
+        optim_D_cat.zero_grad()
 
         # Autoencoder and Classifier; might need cuda here? (!)
         #with torch.autocast('cuda', AUTOCAST):
-        class_out, z_sample = Q.custom_forward(images)  #encode to z
-        X_sample = P(z_sample) #decode to X reconstruction
+        class_out, style_out, combined_out = Q(images)  #encode to z
+        X_sample = P(combined_out) #decode to X reconstruction
+        
         
         recon_loss = F.mse_loss(X_sample, images) * 10
 
@@ -135,12 +142,14 @@ if TRAIN:
              
         # Generator
         #with torch.autocast('cuda', AUTOCAST):
-        class_out, z_sample = Q.custom_forward(images)
+        class_out, style_out, combined_out = Q(images)
         
-        D_fake_gauss = D_gauss(class_out)
+        D_fake_gauss = D_gauss(style_out)
+        D_fake_cat = D_cat(class_out)
 
         # Generator loss
-        G_loss = F.binary_cross_entropy_with_logits(D_fake_gauss, one_label)
+        G_loss = F.binary_cross_entropy_with_logits(D_fake_gauss, one_label) \
+                    + F.binary_cross_entropy_with_logits(D_fake_cat, one_label)
 
         if AUTOCAST:
             scaler_Q_gen.scale(G_loss).backward()
@@ -154,21 +163,37 @@ if TRAIN:
         
         # Discriminators
         #with torch.autocast('cuda', AUTOCAST):
-        D_fake_gauss = D_gauss(class_out.detach())
-        z_real_gauss = (F.one_hot((torch.rand((BATCH_SIZE), device='cuda')*NUM_CLASSES).long(), NUM_CLASSES)).float()
+        D_fake_gauss = D_gauss(style_out.detach())
+        D_fake_cat = D_cat(class_out.detach())
+        
+        z_real_gauss = (torch.randn((BATCH_SIZE, style_dim), device='cuda') * 1)
+        z_real_cat = (F.one_hot((torch.rand((BATCH_SIZE,), device='cuda')*NUM_CLASSES).long(), NUM_CLASSES)).float()
+        
         D_real_gauss = D_gauss(z_real_gauss)
+        D_real_cat = D_cat(z_real_cat)
 
-        # Discriminator classification loss
+        # Discriminator style loss
         D_loss_gauss = F.binary_cross_entropy_with_logits(D_real_gauss, one_label) \
                         + F.binary_cross_entropy_with_logits(D_fake_gauss, zero_label)
+        
+        # Discriminator classification loss
+        D_loss_cat = F.binary_cross_entropy_with_logits(D_real_cat, one_label) \
+                        + F.binary_cross_entropy_with_logits(D_fake_cat, zero_label)
         
         if AUTOCAST:
             scaler_D_gauss.scale(D_loss_gauss).backward()
             scaler_D_gauss.step(optim_D_gauss)
+            scaler_D_cat.scale(D_loss_cat).backward()
+            scaler_D_cat.step(optim_D_cat)
         else:
             D_loss_gauss.backward()
             torch.nn.utils.clip_grad_norm_(master_params(optim_D_gauss), 3.0)
             optim_D_gauss.step()
+
+            D_loss_cat.backward()
+            torch.nn.utils.clip_grad_norm_(master_params(optim_D_cat), 3.0)
+            optim_D_cat.step()
+
         
         # Remaining updates
         if AUTOCAST:
@@ -179,6 +204,7 @@ if TRAIN:
         
         scheduler1.step()
         scheduler2.step()
+        scheduler3.step()
 
          #============ TensorBoard logging ============#
         if (step+1) % collect == 0:   
@@ -192,14 +218,15 @@ if TRAIN:
             info = {
                 'recon_loss': recon_loss.item(),
                 'discriminator_loss_gauss': D_loss_gauss.item(),
+                'discriminator_loss_cat': D_loss_cat.item(),
                 'generator_loss': G_loss.item(),
                 'classifier_loss': C_loss.item(),
                 'euclidean_loss': E_loss.item(),
             }
             info_arr = list(info.values())
-            print('Step [%d/%d]; Losses: Recon: %.2e, D_Class: %.2e, Generator: %.2e, Classifier: %.2e, Euclid: %.2e'
+            print('Step [%d/%d]; Losses: Recon: %.2e, D_Style: %.2e, D_Class: %.2e, Generator: %.2e, Classifier: %.2e, Euclid: %.2e'
                   %(step+1, total_step, info_arr[0], info_arr[1], info_arr[2], 
-                  info_arr[3], info_arr[4]))
+                  info_arr[3], info_arr[4], info_arr[5]))
             
             for tag, value in info.items():
                 logger.scalar_summary(tag, value, step+1)
@@ -216,8 +243,8 @@ if TRAIN:
             with torch.no_grad():
                 Q.eval()
                 P.eval()
-                _, z_sample = Q.custom_forward(images_constant[:log_count])
-                X_sample = P(z_sample)
+                _, _, combined_out = Q(images_constant[:log_count])
+                X_sample = P(combined_out)
                 Q.train()
                 P.train()
 

@@ -7,7 +7,8 @@ from io import BytesIO, StringIO
 from parameters import log_count
 from utility import prepare_rgb_image
 
-PATH = '/homes/lcicek/Desktop/AAE/svhn_images'
+PATH = '/homes/lcicek/Desktop/AAE/svhn_images_class' # change 
+SAVE = True
 
 class Logger(object):
 
@@ -33,7 +34,8 @@ class Logger(object):
             img_array, img = prepare_rgb_image(conc_h)
 
             # save image locally
-            # img.save(f'{PATH}/{tag}-{i}-{step}.png', format="png")
+            if SAVE:
+                img.save(f'{PATH}/{tag}-{i}-{step}.png', format="png")
 
 
             if labels is None:

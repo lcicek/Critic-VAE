@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from parameters import style_dim, NUM_CLASSES
+from parameters import NUM_CLASSES, style_dim, sample_dim
 
 #Encoder
 class Q_net(nn.Module):  
@@ -59,7 +59,7 @@ class Q_net(nn.Module):
                                 nn.LazyLinear(NUM_CLASSES)
                         )
 
-        self.wc = nn.Parameter(torch.randn((NUM_CLASSES, 2)) * 5)       
+        self.wc = nn.Parameter(torch.randn((NUM_CLASSES, sample_dim)) * 5) # sample_dim was 2 before   
         
         
     def forward(self, x_in):
@@ -67,10 +67,21 @@ class Q_net(nn.Module):
         x = self.lin_model(conv_out)
         style_out = self.style_output(x)
         class_out = self.class_output(x)
-        wc_out = torch.mm(F.softmax(class_out, dim=1), self.wc)
+        softmax_class = F.softmax(class_out, dim=1)
+        wc_out = torch.mm(softmax_class, self.wc)
         combined_out = torch.cat([wc_out, style_out], dim=1)  # Concat instead of addition
         return class_out, style_out, combined_out
         
+    def custom_forward(self, x_in):
+        conv_out = torch.flatten(self.model(x_in), 1)
+        x = self.lin_model(conv_out)
+        class_out = self.class_output(x)
+
+        softmax_class = F.softmax(class_out, dim=1)
+        sample = torch.mm(softmax_class, self.wc)
+        
+        return class_out, sample
+
     def get_shape(self, x):
         x = self.model(x)
         s1 = x.shape[1::]
