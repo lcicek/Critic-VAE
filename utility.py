@@ -1,6 +1,6 @@
 import torch
 from torch import nn, Tensor
-from parameters import BATCH_SIZE, DATA_SAMPLES, CRIT_THRESHOLD, eps
+from parameters import BATCH_SIZE, DATA_SAMPLES, CRIT_THRESHOLD
 import numpy as np
 from PIL import Image
 import random
@@ -37,7 +37,7 @@ def prepare_rgb_image(img_array): # numpy_array
 def get_critic_labels(preds):
     labels = []
     for pred_value in preds:
-        if pred_value >= crit_threshold:
+        if pred_value >= CRIT_THRESHOLD:
             label = 1
         else:
             label = 0
@@ -112,12 +112,3 @@ def plot_latent_space(vae, wc, n=120, figsize=15, min_x=-8, min_y=-8, max_x=8, m
     plt.imshow(figure, cmap="Greys_r")
     plt.show()
 '''
-
-# Euclidean loss between cluster heads
-def euclid_loss(wc):
-    dists = torch.cdist(wc.float(), wc.float())
-    dists = 1 / (dists + eps)
-    dists[dists < 1/4] = 0 # cutoff at distance 4
-    dists[dists == 1/eps] = 0 # ignore distances between same cluster-heads
-    dists = torch.mean(dists)
-    return dists

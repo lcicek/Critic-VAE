@@ -1,9 +1,9 @@
 ### TRAINING DETAILS ### 
 
-EPOCHS = 10
+EPOCHS = 15
 NUM_CLASSES = 2         # High/Low Critic Value
 BATCH_SIZE = 256        # Tune as you like
-DATA_SAMPLES = 700    # Minerl images (per epoch)
+DATA_SAMPLES = 50000    # Minerl images (per epoch)
 CRIT_THRESHOLD = 0.75
 
 TRAIN = True         # Whether to execute the training loop cell
