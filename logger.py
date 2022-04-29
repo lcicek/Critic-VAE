@@ -18,7 +18,7 @@ class Logger(object):
         """Log a scalar variable."""
         #summary = tf.compat.v1.Summary(value=[tf.compat.v1.Summary.Value(tag=tag, simple_value=value)])
         #self.writer.add_summary(summary, step)
-        self.writer.add_scalar(tag=tag, scalar_value=value, global_step=step)
+        self.writer.add_scalar(tag=tag, scalar_value=value, global_step=step,  new_style=True)
 
     def image_summary(self, tag, images, epoch, labels=None):
         """Log a list of images."""

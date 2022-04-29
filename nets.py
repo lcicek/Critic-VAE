@@ -57,7 +57,8 @@ class Q_net(nn.Module):
                                 nn.LazyLinear(16),
                                 nn.BatchNorm1d(16),
                                 nn.ReLU(),
-                                nn.LazyLinear(NUM_CLASSES)
+                                nn.LazyLinear(NUM_CLASSES),
+                                nn.Sigmoid() # ?
                         )
 
         self.wc = nn.Parameter(torch.randn((NUM_CLASSES, sample_dim)) * 5) # sample_dim was 2 before   
@@ -78,8 +79,8 @@ class Q_net(nn.Module):
         x = self.lin_model(conv_out)
         class_out = self.class_output(x)
 
-        softmax_class = F.softmax(class_out, dim=1)
-        sample = torch.mm(softmax_class, self.wc)
+        # softmax_class = F.softmax(class_out, dim=1)
+        sample = torch.mm(class_out, self.wc)
         
         return class_out, sample
 
