@@ -17,10 +17,10 @@ from logger import Logger
 from parameters import (
     CRITIC_PATH, MINERL_DATA_ROOT_PATH,
     NUM_CLASSES, BATCH_SIZE, TRAIN, AUTOCAST, EPOCHS, 
-    n_channels, eps, n, z_dim, total_step, collect, log_count
+    n_channels, eps, n, z_dim, total_step, log_count, h
 )
 from utility import (
-    to_np, to_var, euclid_loss, master_params, init_weights, 
+    to_np, euclid_loss, master_params, init_weights, 
     load_minerl_data, get_critic_labels
 ) 
 
@@ -30,6 +30,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 os.environ['MINERL_DATA_ROOT'] = MINERL_DATA_ROOT_PATH
 data = minerl.data.make('MineRLTreechop-v0', num_workers=1)
 all_obs = load_minerl_data(data) # get all minerl observations
+del data
 
 # load critic
 critic = Critic().to(device)
@@ -39,21 +40,21 @@ Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 
 with torch.no_grad():
     Q.eval()
-    shape, combined_shape = Q.get_shape(torch.zeros((BATCH_SIZE, n_channels, 64, 64)).to(device))
+    shape, combined_shape = Q.get_shape(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
     Q.train()
 
 P = P_net(X_dim=n_channels, N=n, z_dim=z_dim, inner_shape=shape).to(device)
-D_gauss = D_net(32, NUM_CLASSES).to(device)
+#D_gauss = D_net(32, NUM_CLASSES).to(device)
 
 with torch.no_grad():
     Q.eval()
-    class_out, z_sample = Q.custom_forward(torch.zeros((BATCH_SIZE, n_channels, 64, 64)).to(device))
+    class_out, z_sample = Q.custom_forward(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
     _ = P(z_sample)
-    _ = D_gauss(class_out)
+    #_ = D_gauss(class_out)
     Q.train()
-    init_weights(Q)
-    init_weights(P)
-    init_weights(D_gauss)
+    # init_weights(Q)
+    #init_weights(P)
+    #init_weights(D_gauss)
 
 if TRAIN:
     # Set learning rates
@@ -69,10 +70,10 @@ if TRAIN:
     
     #regularizing optimizers
     optim_Q_gen = optimizer_class(Q.parameters(), lr=reg_lr, momentum=0.1) # Generator
-    optim_D_gauss = optimizer_class(D_gauss.parameters(), lr=reg_lr, momentum=0.1) # Discriminator classification
+    #optim_D_gauss = optimizer_class(D_gauss.parameters(), lr=reg_lr, momentum=0.1) # Discriminator classification
 
     scheduler1 = torch.optim.lr_scheduler.ConstantLR(optim_Q_gen, factor=eps, total_iters=1000)
-    scheduler2 = torch.optim.lr_scheduler.ConstantLR(optim_D_gauss, factor=eps, total_iters=1000)
+    #scheduler2 = torch.optim.lr_scheduler.ConstantLR(optim_D_gauss, factor=eps, total_iters=1000)
     
     if AUTOCAST:
         scaler_Q_enc = GradScaler()
@@ -124,7 +125,7 @@ if TRAIN:
             
             #regularizing optimizers
             optim_Q_gen.zero_grad()
-            optim_D_gauss.zero_grad()
+            #optim_D_gauss.zero_grad()
 
             # Autoencoder and Classifier; might need cuda here? (!)
             #with torch.autocast('cuda', AUTOCAST):
@@ -138,7 +139,7 @@ if TRAIN:
             
             # Classifier loss
             C_loss = F.cross_entropy(class_out, labels)
-            total_loss = recon_loss + C_loss + E_loss
+            total_loss = recon_loss # + E_loss + C_loss
             
             if AUTOCAST:
                 scaler_Q_enc.scale(total_loss).backward()
@@ -151,11 +152,12 @@ if TRAIN:
                     
             # Generator
             #with torch.autocast('cuda', AUTOCAST):
-            class_out, z_sample = Q.custom_forward(images)
+            #class_out, z_sample = Q.custom_forward(images)
 
-            D_fake_gauss = D_gauss(class_out)   
+            #D_fake_gauss = D_gauss(class_out)   
             # Generator loss
             
+            """ LEAVE OUT FOR NOW
             G_loss = F.binary_cross_entropy_with_logits(D_fake_gauss, one_label)
             if AUTOCAST:
                 scaler_Q_gen.scale(G_loss).backward()
@@ -165,15 +167,16 @@ if TRAIN:
                 G_loss.backward()
                 torch.nn.utils.clip_grad_norm_(master_params(optim_Q_gen), 3.0)
                 optim_Q_gen.step()
-
+            """
             
             # Discriminators
             #with torch.autocast('cuda', AUTOCAST):
-            D_fake_gauss = D_gauss(class_out.detach())
-            z_real_gauss = (F.one_hot((torch.rand((BATCH_SIZE), device='cuda')*NUM_CLASSES).long(), NUM_CLASSES)).float()
-            D_real_gauss = D_gauss(z_real_gauss)
+            #D_fake_gauss = D_gauss(class_out.detach())
+            #z_real_gauss = (F.one_hot((torch.rand((BATCH_SIZE), device='cuda')*NUM_CLASSES).long(), NUM_CLASSES)).float()
+            #D_real_gauss = D_gauss(z_real_gauss)
 
             # Discriminator classification loss
+            """ LEAVE OUT FOR NOW
             D_loss_gauss = F.binary_cross_entropy_with_logits(D_real_gauss, one_label) \
                             + F.binary_cross_entropy_with_logits(D_fake_gauss, zero_label)
             
@@ -184,7 +187,7 @@ if TRAIN:
                 D_loss_gauss.backward()
                 torch.nn.utils.clip_grad_norm_(master_params(optim_D_gauss), 3.0)
                 optim_D_gauss.step()
-            
+            """
             # Remaining updates
             if AUTOCAST:
                 scaler_Q_enc.update()
@@ -193,7 +196,7 @@ if TRAIN:
                 scaler_D_gauss.update()
             
             scheduler1.step()
-            scheduler2.step()
+            # scheduler2.step()
 
         #============ TensorBoard logging ============# 
         # Log after each epoch
@@ -205,16 +208,16 @@ if TRAIN:
         
         info = {
             'recon_loss': recon_loss.item(),
-            'discriminator_loss_gauss': D_loss_gauss.item(),
-            'generator_loss': G_loss.item(),
-            'classifier_loss': C_loss.item(),
-            'euclidean_loss': E_loss.item(),
+            #'classifier_loss': C_loss.item(),
+            #'euclidean_loss': E_loss.item(),
+            # 'discriminator_loss_gauss': D_loss_gauss.item(),
+            # 'generator_loss': G_loss.item(),
         }
 
         info_arr = list(info.values())
-        print('Step [%d/%d]; Losses: Recon: %.2e, D_Class: %.2e, Generator: %.2e, Classifier: %.2e, Euclid: %.2e'
-                %(batch_i+1, total_step, info_arr[0], info_arr[1], info_arr[2], 
-                info_arr[3], info_arr[4]))
+        print('Step [%d/%d]; Losses: Recon: %.2e,'# Euclid: %.2e, Classifier: %.2e' #, D_Class: %.2e, Generator: %.2e,
+                %(batch_i+1, total_step, info_arr[0], #info_arr[1], info_arr[2], #info_arr[3], info_arr[4] 
+                ))
         
         for tag, value in info.items():
             logger.scalar_summary(tag, value, batch_i+1)
@@ -239,7 +242,7 @@ if TRAIN:
         # (3) Log the images
         ## Remove '3' if using MNIST
         info = {
-            'images': [to_np(X_sample.view(-1, 3, 64, 64)[:log_count]), to_np(images_constant[:log_count])]
+            'images': [to_np(X_sample.view(-1, 3, h, h)[:log_count]), to_np(images_constant[:log_count])]
         }
 
         for tag, images in info.items():
@@ -253,5 +256,3 @@ if TRAIN:
 else:
     print("No training to not override saved weights!")
     print("If you want to train, please set TRAIN = True.")
-
-del data

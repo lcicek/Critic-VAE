@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 from io import BytesIO, StringIO
 
-from parameters import SAVE_IMAGES, SAVE_PATH, log_count
+from parameters import SAVE_IMAGES, SAVE_PATH, LOSS, log_count
 from utility import prepare_rgb_image
 
 class Logger(object):
@@ -20,7 +20,7 @@ class Logger(object):
         #self.writer.add_summary(summary, step)
         self.writer.add_scalar(tag=tag, scalar_value=value, global_step=step)
 
-    def image_summary(self, tag, images, step, labels=None):
+    def image_summary(self, tag, images, epoch, labels=None):
         """Log a list of images."""
 
         for i in range(log_count):
@@ -32,12 +32,12 @@ class Logger(object):
 
             # save image locally
             if SAVE_IMAGES:
-                img.save(f'{SAVE_PATH}/{tag}-{i}-{step}.png', format="png")
+                img.save(f'{SAVE_PATH}/img{i}-EP{epoch}-L{labels[i]}.png', format="png")
 
             if labels is None:
-                self.writer.add_image(tag='%s/%d/%d' % (tag, step, i), img_tensor=img_array, dataformats='HWC')
+                self.writer.add_image(tag='img%d-ep%d/%s' % (i, epoch, LOSS), img_tensor=img_array, dataformats='HWC')
             else:
-                self.writer.add_image(tag='%s/%d/%d/%d' % (tag, step, i, labels[i]), img_tensor=img_array, dataformats='HWC')
+                self.writer.add_image(tag='img%d-ep%d-label=%d/%s' % (i, epoch, labels[i], LOSS), img_tensor=img_array, dataformats='HWC')
 
             # Create an Image object
             #img_sum = tf.compat.v1.Summary.Image(encoded_image_string=s.getvalue(),
