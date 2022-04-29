@@ -1,6 +1,6 @@
 import torch
 from torch import nn, Tensor
-from parameters import BATCH_SIZE, DATA_SAMPLES, crit_threshold, eps
+from parameters import BATCH_SIZE, DATA_SAMPLES, CRIT_THRESHOLD, eps
 import numpy as np
 from PIL import Image
 import random

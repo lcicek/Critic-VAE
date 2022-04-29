@@ -3,7 +3,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 import numpy as np
 
-from parameters import NUM_CLASSES, style_dim, sample_dim
+from parameters import NUM_CLASSES, sample_dim
 
 #Encoder
 class Q_net(nn.Module):  
@@ -46,13 +46,7 @@ class Q_net(nn.Module):
                                 nn.LazyLinear(32),
                                 nn.ReLU(),
                         )
-        
-        self.style_output = nn.Sequential(
-                                nn.LazyLinear(16),
-                                nn.BatchNorm1d(16),
-                                nn.ReLU(),
-                                nn.LazyLinear(style_dim)
-                        )
+
         self.class_output = nn.Sequential(
                                 nn.LazyLinear(16),
                                 nn.BatchNorm1d(16),
@@ -63,18 +57,7 @@ class Q_net(nn.Module):
 
         self.wc = nn.Parameter(torch.randn((NUM_CLASSES, sample_dim)) * 5) # sample_dim was 2 before   
         
-        
     def forward(self, x_in):
-        conv_out = torch.flatten(self.model(x_in), 1)
-        x = self.lin_model(conv_out)
-        style_out = self.style_output(x)
-        class_out = self.class_output(x)
-        softmax_class = F.softmax(class_out, dim=1)
-        wc_out = torch.mm(softmax_class, self.wc)
-        combined_out = torch.cat([wc_out, style_out], dim=1)  # Concat instead of addition
-        return class_out, style_out, combined_out
-        
-    def custom_forward(self, x_in):
         conv_out = torch.flatten(self.model(x_in), 1)
         x = self.lin_model(conv_out)
         class_out = self.class_output(x)
@@ -86,12 +69,9 @@ class Q_net(nn.Module):
 
     def get_shape(self, x):
         x = self.model(x)
-        s1 = x.shape[1::]
-        x = torch.flatten(x, 1)
-        x = self.lin_model(x)
-        x = self.style_output(x)
-        s2 = x.shape[1::] # Exclude batch size
-        return s1, s2  
+        shape = x.shape[1::]
+        
+        return shape
 
 # Decoder
 class P_net(nn.Module):  
