@@ -35,8 +35,8 @@ for i, img_file in enumerate(folder):
         img_array /= 255
         img_tensor = Tensor(img_array).to(device)
 
-        preds = critic.evaluate(img_tensor)
-        label = get_critic_labels(preds[0]).item()
+        preds, _ = critic.evaluate(img_tensor)
+        label = get_critic_labels(preds).item()
 
         _, z_sample = Q(img_tensor)
         x_sample = P(z_sample)

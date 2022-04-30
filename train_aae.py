@@ -85,6 +85,7 @@ for ep in range(EPOCHS):
         preds = critic.evaluate(images)
         labels = get_critic_labels(preds[0])
         labels = labels.to(device)
+        labels = labels.unsqueeze(1).float()
         
         if set_eval_images:
             images_constant = images
@@ -92,7 +93,7 @@ for ep in range(EPOCHS):
 
             set_eval_images = False
         
-        labels = F.one_hot(labels, NUM_CLASSES).float()
+        # labels = F.one_hot(labels, NUM_CLASSES).float()
         
         #encode/decode optimizer
         optim_P.zero_grad()
@@ -160,8 +161,9 @@ for ep in range(EPOCHS):
                 #'discriminator_loss_gauss': D_loss_gauss.item(),
                 #'generator_loss': G_loss.item(),
             }
-        
+
             for tag, value in info.items():
+                print(f'classifier loss: {value}')
                 logger.scalar_summary(tag, value, batch_i+1)
 
         if ep+1 == EPOCHS:
