@@ -3,7 +3,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 import numpy as np
 
-from parameters import NUM_CLASSES
+from parameters import NUM_CLASSES, CRIT_THRESHOLD
 
 #Encoder
 class Q_net(nn.Module):  
@@ -15,40 +15,39 @@ class Q_net(nn.Module):
                         nn.ReLU(),
                         
                         nn.Conv2d(N, 2 * N, 3, 1, 1),
-                        #nn.BatchNorm2d(2 * N),
+                        nn.BatchNorm2d(2 * N),
                         nn.MaxPool2d(2),
                         nn.ReLU(),
                         
                         nn.Conv2d(2 * N, 4 * N, 3, 1, 1),
-                        #nn.BatchNorm2d(4 * N),
+                        nn.BatchNorm2d(4 * N),
                         nn.MaxPool2d(2,2),
                         nn.ReLU(),
                         
                         nn.Conv2d(4 * N, z_dim, 3, 1, 1),
-                        #nn.BatchNorm2d(z_dim),
+                        nn.BatchNorm2d(z_dim),
                         nn.MaxPool2d(2,2),
                         nn.ReLU(),
                     )
 
-        self.lin_model = nn.Sequential(
-                                nn.LazyLinear(128),
-                                #nn.BatchNorm1d(128),
-                                nn.ReLU(),
-                                
-                                nn.LazyLinear(64),
-                                #nn.BatchNorm1d(64),
-                                nn.ReLU(),
-
-                                nn.LazyLinear(32),
-                                nn.ReLU(),
-                        )
-
         self.class_output = nn.Sequential(
-                                nn.LazyLinear(16),
-                                #nn.BatchNorm1d(16),
+                                nn.LazyLinear(512),
+                                nn.BatchNorm1d(512),
                                 nn.ReLU(),
-                                nn.LazyLinear(1), # was NUM_CLASSES
-                                nn.Sigmoid() # ?
+                                nn.LazyLinear(256),
+                                nn.BatchNorm1d(256),
+                                nn.ReLU(),
+                                nn.LazyLinear(128),
+                                nn.BatchNorm1d(128),
+                                nn.ReLU(),
+                                nn.LazyLinear(64),
+                                nn.BatchNorm1d(64),
+                                nn.ReLU(),
+                                nn.LazyLinear(32),
+                                nn.BatchNorm1d(32),
+                                nn.ReLU(),
+                                nn.LazyLinear(NUM_CLASSES),
+                                nn.Sigmoid() 
                         )
 
         self.wc = nn.Parameter(torch.randn((NUM_CLASSES, 10)))
@@ -58,13 +57,11 @@ class Q_net(nn.Module):
             x_in = layer(x_in)
 
         x_model = x_in
-
         conv_out = torch.flatten(x_model, 1)
-        x = self.lin_model(conv_out)
-        class_out = self.class_output(x)
 
-        # softmax_class = F.softmax(class_out, dim=1)
-        # sample = torch.mm(class_out, self.wc)
+        class_out = conv_out
+        for layer in self.class_output:
+            class_out = layer(class_out)
         
         return class_out, x_model
 
@@ -134,7 +131,7 @@ class P_net(nn.Module):
 
 # Discriminator
 class D_net(nn.Module):  
-    def __init__(self, N, in_dim):
+    def __init__(self, in_dim, N):
         super(D_net, self).__init__()
         self.model = nn.Sequential(
                         nn.Linear(in_dim, N),
@@ -145,7 +142,8 @@ class D_net(nn.Module):
                         nn.ReLU(), 
                         nn.Linear(N, N),
                         nn.ReLU(),
-                        nn.Linear(N, 1)
+                        nn.Linear(N, 1),
+                        # nn.Sigmoid() # commented out because of BCEwithLogits
                     )
     
     def forward(self, x):

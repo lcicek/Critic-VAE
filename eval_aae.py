@@ -18,8 +18,8 @@ shape = Q.get_shape(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
 P = P_net(X_dim=n_channels, N=n, z_dim=z_dim, inner_shape=shape).to(device)
 
 try:
-    Q.load_state_dict(torch.load('Q_encoder_weights_RC.pt')) # change
-    P.load_state_dict(torch.load('P_decoder_weights_RC.pt'))
+    Q.load_state_dict(torch.load('Q_encoder_weights_RCD.pt')) # change
+    P.load_state_dict(torch.load('P_decoder_weights_RCD.pt'))
 except Exception as e:
     print(e) 
 
@@ -38,8 +38,11 @@ for i, img_file in enumerate(folder):
         preds, _ = critic.evaluate(img_tensor)
         label = get_critic_labels(preds).item()
 
-        _, z_sample = Q(img_tensor)
+        class_out, z_sample = Q(img_tensor)
         x_sample = P(z_sample)
+
+        print(class_out)
+        print(f't: {label}')
 
         conc_h = np.concatenate((to_np(img_tensor.view(-1, 3, h, h)[0]), to_np(x_sample.view(-1, 3, h, h)[0])), axis=2)
         _, img = prepare_rgb_image(conc_h)

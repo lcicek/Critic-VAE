@@ -1,14 +1,15 @@
 ### TRAINING DETAILS ### 
 
-EPOCHS = 15
-NUM_CLASSES = 2 # High/Low Critic Value
+EPOCHS = 25
+NUM_CLASSES = 1 # Just one value between 0 and 1
 BATCH_SIZE = 256        
-DATA_SAMPLES = 75000  # Minerl images (per epoch)
+DATA_SAMPLES = 50000  # Minerl images (per epoch)
 CRIT_THRESHOLD = 0.7
 
 n_channels = 3      # Input channels (3 for RGB)
 n = 12              # Base amount/multiplier for n_channels of Conv2D
 z_dim = 64          # Dimension of latent representation
+eps = 1e-7
 
 gen_lr = 0.001
 reg_lr = 0.001
@@ -26,4 +27,4 @@ EVAL_IMAGES_PATH = '/homes/lcicek/Desktop/AAE/source-images'
 SAVE_IMAGES = False  # Save images locally
 
 ### Loss ###
-LOSS = 'RC'
+LOSS = 'RCD'
