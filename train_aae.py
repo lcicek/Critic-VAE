@@ -47,7 +47,6 @@ with torch.no_grad():
     _ = D_gauss(class_out)
     Q.train()
 
-
 optimizer_class = torch.optim.SGD
 params = [Q.parameters(), P.parameters()]
 
@@ -78,19 +77,10 @@ for ep in range(EPOCHS):
         # NOTE: this will cut off incomplete batches from end of the random indices
         batch_indices = epoch_indices[batch_i:batch_i + BATCH_SIZE]
 
-        # Load the inputs and preprocess
-        all_data = dset[batch_indices] #.astype(np.float32)
+        all_data = dset[batch_indices]
         
         images = Tensor(np.array([d[0] for d in all_data])).to(device)
         labels = Tensor(np.array([d[1] for d in all_data])).to(device)
-        
-        #images = images.transpose(0, 3, 1, 2) # Transpose observations to be channel-first (BCHW instead of BHWC)
-        #images /= 255.0 # Normalize observations. Do this here to avoid using too much memory (images are uint8 by default)
-        #images = Tensor(images).to(device)
-        
-        #preds = critic.evaluate(images)
-        #labels = get_critic_labels(preds[0])
-        #labels = labels.to(device)
         #labels = labels.unsqueeze(1).float()
 
         #encode/decode optimizer

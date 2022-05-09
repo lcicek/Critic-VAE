@@ -73,21 +73,25 @@ def prepare_data(data, critic, device):
         preds, _ = critic.evaluate(images)
         labels = get_critic_labels(preds)
         images = images.detach().cpu().numpy()
-        # labels = labels.unsqueeze(1).float()
 
         # Save (img, label)-tuple for low/high-value images respectively
         low_value_images.extend((images[i], label) for i, label in enumerate(labels) if label == 0)
         high_value_images.extend((images[i], label) for i, label in enumerate(labels) if label == 1)
 
+    # Make sure enough images were collected
     assert len(low_value_images) >= LHV_IMG_COUNT
     assert len(high_value_images) >= LHV_IMG_COUNT
 
+    # Randomize which images get chosen
     np.random.shuffle(low_value_images)
     np.random.shuffle(high_value_images)
 
     final_dset.extend(low_value_images[0:LHV_IMG_COUNT])
     final_dset.extend(high_value_images[0:LHV_IMG_COUNT])
     final_dset = np.array(final_dset)
+    
+    # Randomize order of high and low value images
+    np.random.shuffle(final_dset)
 
     return final_dset
 
