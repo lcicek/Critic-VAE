@@ -81,7 +81,7 @@ for ep in range(EPOCHS):
         
         images = Tensor(np.array([d[0] for d in all_data])).to(device)
         labels = Tensor(np.array([d[1] for d in all_data])).to(device)
-        #labels = labels.unsqueeze(1).float()
+        labels = F.one_hot(labels.long(), num_classes=NUM_CLASSES)
 
         #encode/decode optimizer
         optim_P.zero_grad()
@@ -96,9 +96,10 @@ for ep in range(EPOCHS):
         X_sample = P(z_sample) #decode to X reconstruction
         
         recon_loss = F.mse_loss(X_sample, images)
-        # c_loss = F.binary_cross_entropy(class_out, labels)
-        #total_loss = recon_loss # + c_loss
-        recon_loss.backward()
+        c_loss = F.binary_cross_entropy(class_out, labels.float())
+
+        total_loss = recon_loss + c_loss
+        total_loss.backward()
             
         optim_P.step()
         optim_Q_enc.step()
@@ -138,7 +139,7 @@ for ep in range(EPOCHS):
 
             info = {
                 'recon_loss': recon_loss.item(),
-                # 'classifier_loss': c_loss.item(),
+                'classifier_loss': c_loss.item(),
                 'discriminator_loss_gauss': D_loss_gauss.item(),
                 'generator_loss': G_loss.item(),
             }

@@ -1,7 +1,7 @@
 ### TRAINING DETAILS ### 
 
 EPOCHS = 15
-NUM_CLASSES = 1 # Just one value between 0 and 1
+NUM_CLASSES = 2 # Just one value between 0 and 1
 BATCH_SIZE = 256        
 MINERL_SAMPLES = 120000  # Minerl images to extract high/low value images from
 DATA_SAMPLES = 51200 # Should divide evenly with batch_size
