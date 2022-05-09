@@ -1,9 +1,11 @@
 ### TRAINING DETAILS ### 
 
-EPOCHS = 25
+EPOCHS = 15
 NUM_CLASSES = 1 # Just one value between 0 and 1
 BATCH_SIZE = 256        
-DATA_SAMPLES = 50000  # Minerl images (per epoch)
+MINERL_SAMPLES = 120000  # Minerl images to extract high/low value images from
+DATA_SAMPLES = 51200 # Should divide evenly with batch_size
+LHV_IMG_COUNT = DATA_SAMPLES // 2 # High/Low-Value Image count. LV-images = HV-images
 CRIT_THRESHOLD = 0.7
 
 n_channels = 3      # Input channels (3 for RGB)
@@ -15,7 +17,7 @@ gen_lr = 0.001
 reg_lr = 0.001
 
 collect = BATCH_SIZE * 10  # images are logged every "collect"-step
-log_count = 5              # amount of images that should be logged
+log_count = 10              # amount of images that should be logged
 h = 64 # image height (=width)
 
 ### PATHS ###
@@ -24,7 +26,7 @@ CRITIC_PATH = '/homes/lcicek/Desktop/AAE/critic-rewidx=1-cepochs=15-datamode=tru
 MINERL_DATA_ROOT_PATH = '/homes/lcicek/anaconda3/envs/aae/lib/python3.9/site-packages/minerl'
 EVAL_IMAGES_PATH = '/homes/lcicek/Desktop/AAE/source-images'
 
-SAVE_IMAGES = False  # Save images locally
+SAVE_IMAGES = True  # Save images locally
 
 ### Loss ###
 LOSS = 'RCD'

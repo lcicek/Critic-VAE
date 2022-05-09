@@ -26,6 +26,9 @@ del data
 critic = Critic().to(device)
 critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
 
+### Preprocess minerl data; Divide evenly into high/low-value images ###
+dset = prepare_data(all_obs, critic, device)
+
 ### Initialize networks ###
 Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 
@@ -62,7 +65,7 @@ scheduler2 = torch.optim.lr_scheduler.ConstantLR(optim_D_gauss, factor=eps, tota
 one_label = torch.ones((BATCH_SIZE, 1), device='cuda')
 zero_label = torch.zeros((BATCH_SIZE, 1), device='cuda')
 
-num_samples = all_obs.shape[0]
+num_samples = dset.shape[0]
 
 # Start training
 for ep in range(EPOCHS):
@@ -76,15 +79,19 @@ for ep in range(EPOCHS):
         batch_indices = epoch_indices[batch_i:batch_i + BATCH_SIZE]
 
         # Load the inputs and preprocess
-        images = all_obs[batch_indices].astype(np.float32)
-        images = images.transpose(0, 3, 1, 2) # Transpose observations to be channel-first (BCHW instead of BHWC)
-        images /= 255.0 # Normalize observations. Do this here to avoid using too much memory (images are uint8 by default)
-        images = Tensor(images).to(device)
+        all_data = dset[batch_indices] #.astype(np.float32)
         
-        preds = critic.evaluate(images)
-        labels = get_critic_labels(preds[0])
-        labels = labels.to(device)
-        labels = labels.unsqueeze(1).float()
+        images = Tensor(np.array([d[0] for d in all_data])).to(device)
+        labels = Tensor(np.array([d[1] for d in all_data])).to(device)
+        
+        #images = images.transpose(0, 3, 1, 2) # Transpose observations to be channel-first (BCHW instead of BHWC)
+        #images /= 255.0 # Normalize observations. Do this here to avoid using too much memory (images are uint8 by default)
+        #images = Tensor(images).to(device)
+        
+        #preds = critic.evaluate(images)
+        #labels = get_critic_labels(preds[0])
+        #labels = labels.to(device)
+        #labels = labels.unsqueeze(1).float()
 
         #encode/decode optimizer
         optim_P.zero_grad()

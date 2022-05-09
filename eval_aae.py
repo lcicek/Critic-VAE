@@ -41,8 +41,7 @@ for i, img_file in enumerate(folder):
         class_out, z_sample = Q(img_tensor)
         x_sample = P(z_sample)
 
-        print(class_out)
-        print(f't: {label}')
+        print(f'class_output is: {class_out[0].item()}')
 
         conc_h = np.concatenate((to_np(img_tensor.view(-1, 3, h, h)[0]), to_np(x_sample.view(-1, 3, h, h)[0])), axis=2)
         _, img = prepare_rgb_image(conc_h)
