@@ -1,9 +1,24 @@
+from turtle import forward
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 import numpy as np
 
-from parameters import NUM_CLASSES, CRIT_THRESHOLD
+from parameters import NUM_CLASSES
+from utility import sample_gauss
+
+class AAE(nn.Module):
+    def __init__(self, X_dim, N, z_dim):
+        super(AAE, self).__init__()
+
+        self.encoder = Q_net(X_dim=X_dim, N=N, z_dim=z_dim)
+        self.decoder = P_net(X_dim=X_dim, N=N, z_dim=z_dim)
+
+    def forward(self, x):
+        class_out, z = self.encoder(x)
+        X = self.decoder(z)
+
+        return class_out, z, X
 
 #Encoder
 class Q_net(nn.Module):  
@@ -73,7 +88,7 @@ class Q_net(nn.Module):
 
 # Decoder
 class P_net(nn.Module):  
-    def __init__(self, X_dim, N, z_dim, inner_shape):
+    def __init__(self, X_dim, N, z_dim, inner_shape=[4, 4, 64]):
         super(P_net, self).__init__()
 
         self.model = nn.Sequential(

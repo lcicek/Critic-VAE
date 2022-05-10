@@ -3,7 +3,7 @@ from torch import Tensor
 import os
 import numpy as np
 from PIL import Image
-from nets import Q_net, P_net, Critic
+from nets import *
 from parameters import *
 from utility import prepare_rgb_image, get_critic_labels, to_np
 
@@ -13,18 +13,21 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 critic = Critic().to(device)
 critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
 
-Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
-shape = Q.get_shape(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
-P = P_net(X_dim=n_channels, N=n, z_dim=z_dim, inner_shape=shape).to(device)
+aae = AAE(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+#Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+#shape = Q.get_shape(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
+#P = P_net(X_dim=n_channels, N=n, z_dim=z_dim, inner_shape=shape).to(device)
 
 try:
-    Q.load_state_dict(torch.load('Q_encoder_weights_RCD.pt')) # change
-    P.load_state_dict(torch.load('P_decoder_weights_RCD.pt'))
+    aae.load_state_dict(torch.load('AAE_weights_RCD.pt'))
+    #Q.load_state_dict(torch.load('Q_encoder_weights_RCD.pt')) # change
+    #P.load_state_dict(torch.load('P_decoder_weights_RCD.pt'))
 except Exception as e:
     print(e) 
 
-Q.eval()
-P.eval()
+aae.eval()
+#Q.eval()
+#P.eval()
 
 folder = os.listdir(EVAL_IMAGES_PATH)
 for i, img_file in enumerate(folder):
@@ -38,8 +41,9 @@ for i, img_file in enumerate(folder):
         preds, _ = critic.evaluate(img_tensor)
         label = get_critic_labels(preds).item()
 
-        class_out, z_sample = Q(img_tensor)
-        x_sample = P(z_sample)
+        class_out, z_sample, x_sample = aae(img_tensor)
+        #class_out, z_sample = Q(img_tensor)
+        #x_sample = P(z_sample)
 
         print(f'class: {Tensor.tolist(class_out[0])}, label: {label}')
 

@@ -37,8 +37,8 @@ def sample_gauss():
     sample = torch.rand((BATCH_SIZE, 2), device='cuda')
     labels = torch.clone(sample)
     
-    labels[labels < CRIT_THRESHOLD] = [1, 0] # already one hot version
-    labels[labels >= CRIT_THRESHOLD] = [0, 1]
+    labels[labels < CRIT_THRESHOLD] = 0 # already one hot version
+    labels[labels >= CRIT_THRESHOLD] = 1
 
     return sample, labels
 
@@ -88,7 +88,7 @@ def prepare_data(data, critic, device):
 
     final_dset.extend(low_value_images[0:LHV_IMG_COUNT])
     final_dset.extend(high_value_images[0:LHV_IMG_COUNT])
-    final_dset = np.array(final_dset)
+    final_dset = np.array(final_dset, dtype=object)
     
     # Randomize order of high and low value images
     np.random.shuffle(final_dset)
