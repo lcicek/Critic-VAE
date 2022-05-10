@@ -4,6 +4,7 @@ from parameters import BATCH_SIZE, DATA_SAMPLES, CRIT_THRESHOLD, MINERL_SAMPLES,
 import numpy as np
 from PIL import Image
 import random
+import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
 
 def to_np(x):
     return x.data.cpu().numpy()
@@ -116,6 +117,15 @@ def load_minerl_data(data):
     all_pov_obs = np.array(all_pov_obs)
 
     return all_pov_obs
+
+def plot_latent(autoencoder, data, num_batches, device):
+    for i, (x, y) in enumerate(data):
+        z = autoencoder.encoder(x.to(device))
+        z = z.to('cpu').detach().numpy()
+        plt.scatter(z[:, 0], z[:, 1], c=y, cmap='tab10')
+        if i > num_batches:
+            plt.colorbar()
+            break
 
 # Not fully mine. Some parts taken from another lecture.
 # Tune min/max parameters if needed.

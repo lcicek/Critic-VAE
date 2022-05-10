@@ -10,7 +10,7 @@ CRIT_THRESHOLD = 0.7
 
 n_channels = 3      # Input channels (3 for RGB)
 n = 12              # Base amount/multiplier for n_channels of Conv2D
-z_dim = 64          # Dimension of latent representation
+z_dim = 32          # Dimension of latent representation
 eps = 1e-7
 
 gen_lr = 0.001

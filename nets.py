@@ -44,6 +44,25 @@ class Q_net(nn.Module):
                         nn.MaxPool2d(2,2),
                         nn.ReLU(),
                     )
+        
+        self.plot_output = nn.Sequential(
+                                nn.LazyLinear(512),
+                                nn.BatchNorm1d(512),
+                                nn.ReLU(),
+                                nn.LazyLinear(256),
+                                nn.BatchNorm1d(256),
+                                nn.ReLU(),
+                                nn.LazyLinear(128),
+                                nn.BatchNorm1d(128),
+                                nn.ReLU(),
+                                nn.LazyLinear(64),
+                                nn.BatchNorm1d(64),
+                                nn.ReLU(),
+                                nn.LazyLinear(32),
+                                nn.BatchNorm1d(32),
+                                nn.ReLU(),
+                                nn.LazyLinear(NUM_CLASSES)
+                        )
 
         self.class_output = nn.Sequential(
                                 nn.LazyLinear(512),
@@ -80,6 +99,10 @@ class Q_net(nn.Module):
         
         return class_out, x_model
 
+    def get_plot_output(self, x):
+        conv_out = torch.flatten(self.model(x), 1)
+        return self.plot_output(conv_out)
+
     def get_shape(self, x):
         x = self.model(x)
         shape = x.shape[1::]
@@ -88,7 +111,7 @@ class Q_net(nn.Module):
 
 # Decoder
 class P_net(nn.Module):  
-    def __init__(self, X_dim, N, z_dim, inner_shape=[4, 4, 64]):
+    def __init__(self, X_dim, N, z_dim, inner_shape=[4, 4, 32]):
         super(P_net, self).__init__()
 
         self.model = nn.Sequential(
