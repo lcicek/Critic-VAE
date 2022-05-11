@@ -25,6 +25,7 @@ SAVE_PATH = '/homes/lcicek/Desktop/AAE/images' # change
 CRITIC_PATH = '/homes/lcicek/Desktop/AAE/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=99999-shift=12-chfak=1-dropout=0.3.pt'
 MINERL_DATA_ROOT_PATH = '/homes/lcicek/anaconda3/envs/aae/lib/python3.9/site-packages/minerl'
 EVAL_IMAGES_PATH = '/homes/lcicek/Desktop/AAE/source-images'
+PLOT_DATASET_FILE = 'plot_dataset.pt'
 
 SAVE_IMAGES = True  # Save images locally
 

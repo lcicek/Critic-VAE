@@ -56,7 +56,7 @@ def get_critic_labels(preds):
 
     return torch.as_tensor(labels)
 
-def prepare_data(data, critic, device):
+def prepare_data(data, critic, device, shuffle=True):
     print('preparing data...')
     final_dset = []
     num_samples = data.shape[0]
@@ -84,23 +84,27 @@ def prepare_data(data, critic, device):
     assert len(high_value_images) >= LHV_IMG_COUNT
 
     # Randomize which images get chosen
-    np.random.shuffle(low_value_images)
-    np.random.shuffle(high_value_images)
+    if shuffle:
+        np.random.shuffle(low_value_images)
+        np.random.shuffle(high_value_images)
 
     final_dset.extend(low_value_images[0:LHV_IMG_COUNT])
     final_dset.extend(high_value_images[0:LHV_IMG_COUNT])
     final_dset = np.array(final_dset, dtype=object)
     
     # Randomize order of high and low value images
+    if not shuffle:
+        np.random.seed(1) # Shuffle high- and low-value-images but keep randomization the same for plotting
     np.random.shuffle(final_dset)
 
     return final_dset
 
 # source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
-def load_minerl_data(data):
+def load_minerl_data(data, shuffle=True):
     print("loading minerl-data...")
     trajectory_names = data.get_trajectory_names()
-    random.shuffle(trajectory_names)
+    if shuffle:
+        random.shuffle(trajectory_names)
 
     all_pov_obs = []
     # Add trajectories to the data until we reach the required DATA_SAMPLES.
@@ -117,57 +121,3 @@ def load_minerl_data(data):
     all_pov_obs = np.array(all_pov_obs)
 
     return all_pov_obs
-
-def plot_latent(autoencoder, data, num_batches, device):
-    for i, (x, y) in enumerate(data):
-        z = autoencoder.encoder(x.to(device))
-        z = z.to('cpu').detach().numpy()
-        plt.scatter(z[:, 0], z[:, 1], c=y, cmap='tab10')
-        if i > num_batches:
-            plt.colorbar()
-            break
-
-# Not fully mine. Some parts taken from another lecture.
-# Tune min/max parameters if needed.
-'''
-def plot_latent_space(vae, wc, n=120, figsize=15, min_x=-8, min_y=-8, max_x=8, max_y=8):
-    from matplotlib import pyplot as plt
-    # display a n*n 2D manifold of digits
-    digit_size = 32
-    scale = 1.0
-    figure = np.zeros((digit_size * n, digit_size * n))
-    # linearly spaced coordinates corresponding to the 2D plot
-    # of digit classes in the latent space
-    grid_x = np.linspace(min_x, max_x, n)
-    grid_y = np.linspace(min_y, max_y, n)[::-1]
-
-    for i, yi in enumerate(grid_y):
-        for j, xi in enumerate(grid_x):
-            z_sample = np.array([[xi, yi]])
-            c_head = torch.Tensor(wc[torch.cdist(torch.Tensor(wc), torch.Tensor(z_sample)).argmin()])
-            z_sample = torch.cat([c_head, torch.Tensor(z_sample[0])-c_head])
-            x_decoded = to_np(vae(z_sample.unsqueeze(0).cuda()))
-            if n_channels > 1:
-              digit = x_decoded[0].reshape(3, digit_size, digit_size)
-            else:
-              digit = x_decoded[0].reshape(digit_size, digit_size)
-            if np.any(abs(wc[:,0] - xi) < 0.125, where=(abs(wc[:,1] - yi) < 0.125)):
-                digit = np.ones_like(digit)
-            figure[
-                i * digit_size : (i + 1) * digit_size,
-                j * digit_size : (j + 1) * digit_size,
-            ] = digit
-
-    plt.figure(figsize=(figsize, figsize))
-    start_range = digit_size // 2
-    end_range = n * digit_size + start_range
-    pixel_range = np.arange(start_range, end_range, digit_size)
-    sample_range_x = np.round(grid_x, 1)
-    sample_range_y = np.round(grid_y, 1)
-    plt.xticks(pixel_range, sample_range_x)
-    plt.yticks(pixel_range, sample_range_y)
-    plt.xlabel("z[0]")
-    plt.ylabel("z[1]")
-    plt.imshow(figure, cmap="Greys_r")
-    plt.show()
-'''
