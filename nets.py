@@ -5,20 +5,6 @@ import torch.nn.functional as F
 import numpy as np
 
 from parameters import NUM_CLASSES
-from utility import sample_gauss
-
-class AAE(nn.Module):
-    def __init__(self, X_dim, N, z_dim):
-        super(AAE, self).__init__()
-
-        self.encoder = Q_net(X_dim=X_dim, N=N, z_dim=z_dim)
-        self.decoder = P_net(X_dim=X_dim, N=N, z_dim=z_dim)
-
-    def forward(self, x):
-        class_out, z = self.encoder(x)
-        X = self.decoder(z)
-
-        return class_out, z, X
 
 #Encoder
 class Q_net(nn.Module):  
@@ -45,37 +31,11 @@ class Q_net(nn.Module):
                         nn.ReLU(),
                     )
         
-        self.plot_output = nn.Sequential(
-                                nn.LazyLinear(256),
-                                nn.BatchNorm1d(256),
-                                nn.ReLU(),
-                                nn.LazyLinear(128),
-                                nn.BatchNorm1d(128),
-                                nn.ReLU(),
-                                nn.LazyLinear(64),
-                                nn.BatchNorm1d(64),
-                                nn.ReLU(),
-                                nn.LazyLinear(32),
-                                nn.BatchNorm1d(32),
-                                nn.ReLU(),
-                                nn.LazyLinear(NUM_CLASSES)
-                        )
+        self.plot_output = nn.Linear(512, NUM_CLASSES, bias=False)
 
         self.class_output = nn.Sequential(
                                 nn.LazyLinear(512),
                                 nn.BatchNorm1d(512),
-                                nn.ReLU(),
-                                nn.LazyLinear(256),
-                                nn.BatchNorm1d(256),
-                                nn.ReLU(),
-                                nn.LazyLinear(128),
-                                nn.BatchNorm1d(128),
-                                nn.ReLU(),
-                                nn.LazyLinear(64),
-                                nn.BatchNorm1d(64),
-                                nn.ReLU(),
-                                nn.LazyLinear(32),
-                                nn.BatchNorm1d(32),
                                 nn.ReLU(),
                                 nn.LazyLinear(NUM_CLASSES),
                                 nn.Sigmoid() 
@@ -97,8 +57,13 @@ class Q_net(nn.Module):
         return class_out, x_model
 
     def get_plot_output(self, x):
-        conv_out = torch.flatten(self.model(x), 1)
-        return self.plot_output(conv_out)
+        with torch.no_grad():
+            conv_out = torch.flatten(self.model(x), 1)
+            p_out = self.plot_output(conv_out)
+
+        print(p_out)
+
+        return p_out
 
     def get_shape(self, x):
         x = self.model(x)

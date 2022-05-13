@@ -35,7 +35,7 @@ def prepare_rgb_image(img_array): # numpy_array
     return img_array, image
 
 def sample_gauss():
-    sample = torch.rand((BATCH_SIZE, 2), device='cuda')
+    sample = torch.randn((BATCH_SIZE, 2), device='cuda')
     labels = torch.clone(sample)
     
     labels[labels < CRIT_THRESHOLD] = 0 # already one hot version

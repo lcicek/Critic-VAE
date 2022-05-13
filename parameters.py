@@ -1,10 +1,10 @@
 ### TRAINING DETAILS ### 
 
-EPOCHS = 15
+EPOCHS = 12
 NUM_CLASSES = 2 # Just one value between 0 and 1
 BATCH_SIZE = 256        
 MINERL_SAMPLES = 120000  # Minerl images to extract high/low value images from
-DATA_SAMPLES = 51200 # Should divide evenly with batch_size
+DATA_SAMPLES = 76800 # Should divide evenly with batch_size
 LHV_IMG_COUNT = DATA_SAMPLES // 2 # High/Low-Value Image count. LV-images = HV-images
 CRIT_THRESHOLD = 0.7
 

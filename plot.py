@@ -9,7 +9,8 @@ from nets import *
 from parameters import *
 from utility import *
 
-SEPERATE_IMAGES = False
+SEPERATE_IMAGES = True
+NORMALIZE = False
 
 def init_subplots():
     zero_plot = plt.subplot(121)
@@ -21,17 +22,24 @@ def init_subplots():
     zero_plot.set_aspect('equal')
     one_plot.set_aspect('equal')
 
+    zero_plot.axis(xmin=-2, xmax=2)
+    zero_plot.axis(ymin=-2, ymax=2)
+
+    one_plot.axis(xmin=-2, xmax=2)
+    one_plot.axis(ymin=-2, ymax=2)
+
     return zero_plot, one_plot
 
 def subplot(subplot, images, labels):
     with torch.no_grad():
-            z = aae.encoder.get_plot_output(images)
+            z = Q.get_plot_output(images)
             z = z.detach().to('cpu').numpy()
 
-            # Normalize data to range [0, 1] so plotting doesn't vary
-            z_min = np.min(z, axis=0, keepdims=True) # axis 0 since shape is batch_size, _, _, _
-            z_max_min = np.max(z, axis=0, keepdims=True) - z_min
-            z = (z - z_min) / z_max_min
+            if NORMALIZE:
+                # Normalize data to range [0, 1] so plotting doesn't vary
+                z_min = np.min(z, axis=0, keepdims=True) # axis 0 since shape is batch_size, _, _, _
+                z_max_min = np.max(z, axis=0, keepdims=True) - z_min
+                z = (z - z_min) / z_max_min
 
     x = z[:, 0]
     y = z[:, 1]
@@ -61,16 +69,15 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 critic = Critic().to(device)
 critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
 
-aae = AAE(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 
 try:
     dset = torch.load('plot_dataset.pt')
-    aae.load_state_dict(torch.load('AAE_weights_RCD.pt'))
+    Q.load_state_dict(torch.load('Q_encoder_weights_RCD.pt'))
 except Exception as e:
     print(e) 
 
-aae.eval()
-aae.encoder.eval()
+Q.eval()
 
 if SEPERATE_IMAGES:
     zero_plot, one_plot = init_subplots()
@@ -95,8 +102,9 @@ for batch_i in range(0, num_samples, BATCH_SIZE):
             subplot(plt, images, labels)
 
         if batch_i >= num_samples - BATCH_SIZE:
-            plt.xlim([-0.05, 1.05]) # x-coordinate boundaries
-            plt.ylim([-0.05, 1.05])
+            #if NORMALIZE:
+            #plt.xlim([-2, 2]) # x-coordinate boundaries
+            #plt.ylim([-2, 2])
 
             if not SEPERATE_IMAGES:
                 ax = plt.gca() #get the current axes

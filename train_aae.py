@@ -30,20 +30,22 @@ critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
 dset = prepare_data(all_obs, critic, device)
 
 ### Initialize networks ###
-aae = AAE(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 D_gauss = D_net(NUM_CLASSES, 64).to(device)
 
 with torch.no_grad():
-    aae.eval()
-    class_out, _, _ = aae(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
+    Q.eval()
+    class_out, _= Q(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
     _ = D_gauss(class_out)
-    aae.train()
+    Q.train()
 
-optim_aae = torch.optim.Adam(aae.parameters(), lr=gen_lr)
+optim_P = torch.optim.Adam(P.parameters(), lr=gen_lr)
+optim_Q_enc = torch.optim.Adam(Q.parameters(), lr=gen_lr)
 
 #regularizing optimizers
 optimizer_class = torch.optim.SGD
-optim_Q_gen = optimizer_class(aae.encoder.parameters(), lr=reg_lr, momentum=0.1) # Generator
+optim_Q_gen = optimizer_class(Q.parameters(), lr=reg_lr, momentum=0.1) # Generator
 optim_D_gauss = optimizer_class(D_gauss.parameters(), lr=reg_lr, momentum=0.1) # Discriminator classification
 
 scheduler1 = torch.optim.lr_scheduler.ConstantLR(optim_Q_gen, factor=eps, total_iters=1000)
@@ -71,12 +73,14 @@ for ep in range(EPOCHS):
         labels = Tensor(np.array([d[1] for d in all_data])).to(device)
         labels = F.one_hot(labels.long(), num_classes=NUM_CLASSES)
 
-        optim_aae.zero_grad()
+        optim_P.zero_grad()
+        optim_Q_enc.zero_grad()
         optim_Q_gen.zero_grad()
         optim_D_gauss.zero_grad()
 
         ### Autoencoder and Classifier ###
-        class_out, z_sample, X_sample = aae(images)
+        class_out, z_sample = Q(images)
+        X_sample = P(z_sample)
 
         recon_loss = F.mse_loss(X_sample, images)
         c_loss = F.binary_cross_entropy(class_out, labels.float())
@@ -84,10 +88,11 @@ for ep in range(EPOCHS):
         total_loss = recon_loss + c_loss
         total_loss.backward()
             
-        optim_aae.step()
+        optim_P.step()
+        optim_Q_enc.step()
 
         ### GENERATOR ###
-        class_out, _ = aae.encoder(images)
+        class_out, _ = Q(images)
         D_fake_gauss = D_gauss(class_out)
         
         # Generator loss
@@ -96,7 +101,7 @@ for ep in range(EPOCHS):
         optim_Q_gen.step()
     
         ### DISCRIMINATOR ###
-        class_out, _ = aae.encoder(images)
+        class_out, _ = Q(images)
 
         D_fake_gauss = D_gauss(class_out.detach())
         z_real_gauss, _ = sample_gauss()
@@ -138,5 +143,6 @@ for ep in range(EPOCHS):
             #    logger.image_summary(tag, images, ep, to_np(labels_constant))
 
     # Save states
-    torch.save(aae.state_dict(),f'AAE_weights_{LOSS}.pt')
+    torch.save(Q.state_dict(),f'Q_encoder_weights_{LOSS}.pt')
+    # torch.save(P.state_dict(),f'P_decoder_weights_{LOSS}.pt')
     #torch.save(D_gauss.state_dict(),'D_discriminator_gauss_weights.pt')
