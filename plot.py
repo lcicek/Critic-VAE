@@ -4,29 +4,23 @@ from torch import Tensor
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
+from scipy.stats import gaussian_kde
 
 from nets import *
 from parameters import *
 from utility import *
 
-SEPERATE_IMAGES = True
+SEPARATE_IMAGES = True
 NORMALIZE = False
 
 def init_subplots():
-    zero_plot = plt.subplot(121)
-    one_plot = plt.subplot(122)
+    zero_plot = plt.subplot(121)    
+    one_plot = plt.subplot(122, sharex=zero_plot, sharey=zero_plot)
 
     zero_plot.set_title('Critic-Label: 0')
     one_plot.set_title('Critic-Label: 1')
 
-    zero_plot.set_aspect('equal')
-    one_plot.set_aspect('equal')
-
-    zero_plot.axis(xmin=-2, xmax=2)
-    zero_plot.axis(ymin=-2, ymax=2)
-
-    one_plot.axis(xmin=-2, xmax=2)
-    one_plot.axis(ymin=-2, ymax=2)
+    #zero_plot.axis(xmin=-2, xmax=2)
 
     return zero_plot, one_plot
 
@@ -44,7 +38,14 @@ def subplot(subplot, images, labels):
     x = z[:, 0]
     y = z[:, 1]
 
-    subplot.scatter(x, y, c=labels)
+    if SEPARATE_IMAGES:
+        # Calculate the point density
+        xy = np.vstack([x,y])
+        z = gaussian_kde(xy)(xy)
+
+        subplot.scatter(x, y, c=z)
+    else:
+        subplot.scatter(x, y, c=labels)
 
 def separate(images, labels):
     zero_indices = torch.from_numpy(np.where(labels==0)[0]).to(device).long()
@@ -79,7 +80,7 @@ except Exception as e:
 
 Q.eval()
 
-if SEPERATE_IMAGES:
+if SEPARATE_IMAGES:
     zero_plot, one_plot = init_subplots()
 
 print('plotting...')
@@ -94,7 +95,7 @@ for batch_i in range(0, num_samples, BATCH_SIZE):
         images = Tensor(np.array([d[0] for d in batch])).to(device)
         labels = np.array([d[1] for d in batch])
 
-        if SEPERATE_IMAGES:
+        if SEPARATE_IMAGES:
             zi, zl, oi, ol = separate(images=images, labels=labels)
             subplot(zero_plot, zi, zl)
             subplot(one_plot, oi, ol)
@@ -106,17 +107,10 @@ for batch_i in range(0, num_samples, BATCH_SIZE):
             #plt.xlim([-2, 2]) # x-coordinate boundaries
             #plt.ylim([-2, 2])
 
-            if not SEPERATE_IMAGES:
+            if not SEPARATE_IMAGES:
                 ax = plt.gca() #get the current axes
                 pcm = ax.get_children()[2]
                 plt.colorbar(pcm, ax=ax)
 
             plt.show()
             break
-
-
-
-
-
-
-

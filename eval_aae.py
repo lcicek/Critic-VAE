@@ -13,16 +13,17 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 critic = Critic().to(device)
 critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
 
-aae = AAE(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 
 try:
-    aae.load_state_dict(torch.load('AAE_weights_RCD.pt'))
+    Q.load_state_dict(torch.load('Q_encoder_weights_RCD.pt'))
+    P.load_state_dict(torch.load('P_decoder_weights_RCD.pt'))
 except Exception as e:
     print(e) 
 
-aae.eval()
-#Q.eval()
-#P.eval()
+Q.eval()
+P.eval()
 
 folder = os.listdir(EVAL_IMAGES_PATH)
 for i, img_file in enumerate(folder):
@@ -36,11 +37,12 @@ for i, img_file in enumerate(folder):
         preds, _ = critic.evaluate(img_tensor)
         label = get_critic_labels(preds).item()
 
-        class_out, z_sample, x_sample = aae(img_tensor)
+        class_out, z_sample = Q(img_tensor)
+        X_sample = P(z_sample)
         
         print(f'class: {Tensor.tolist(class_out[0])}, label: {label}')
 
-        conc_h = np.concatenate((to_np(img_tensor.view(-1, 3, h, h)[0]), to_np(x_sample.view(-1, 3, h, h)[0])), axis=2)
+        conc_h = np.concatenate((to_np(img_tensor.view(-1, 3, h, h)[0]), to_np(X_sample.view(-1, 3, h, h)[0])), axis=2)
         _, img = prepare_rgb_image(conc_h)
 
         img.save(f'{SAVE_PATH}/image-{i:03d}-label={label}.png', format="png")

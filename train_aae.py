@@ -12,22 +12,21 @@ from nets import *
 from parameters import *
 from utility import *
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 logger = Logger('./logs/aae' + str(time())[-5::])
 
 ### Initialize mineRL dataset ###
 os.environ['MINERL_DATA_ROOT'] = MINERL_DATA_ROOT_PATH
 data = minerl.data.make('MineRLTreechop-v0', num_workers=1)
-all_obs = load_minerl_data(data) # get all minerl observations
-del data
+all_pov_obs = load_minerl_data(data) # get all minerl observations, divide in 2 for lower memory usage
+del data # without this line errors gets thrown at the end of the program
 
 ### Load trained critic model ###
-critic = Critic().to(device)
-critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
+print('loading critic...')
+critic = Critic().to(torch.device('cpu'))
+critic.load_state_dict(torch.load(CRITIC_PATH, map_location='cpu'))
 
 ### Preprocess minerl data; Divide evenly into high/low-value images ###
-dset = prepare_data(all_obs, critic, device)
+dset = prepare_data(all_pov_obs, critic)
 
 ### Initialize networks ###
 Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
@@ -71,7 +70,7 @@ for ep in range(EPOCHS):
         
         images = Tensor(np.array([d[0] for d in all_data])).to(device)
         labels = Tensor(np.array([d[1] for d in all_data])).to(device)
-        labels = F.one_hot(labels.long(), num_classes=NUM_CLASSES)
+        classes = F.one_hot(labels.long(), num_classes=NUM_CLASSES)
 
         optim_P.zero_grad()
         optim_Q_enc.zero_grad()
@@ -83,7 +82,7 @@ for ep in range(EPOCHS):
         X_sample = P(z_sample)
 
         recon_loss = F.mse_loss(X_sample, images)
-        c_loss = F.binary_cross_entropy(class_out, labels.float())
+        c_loss = F.binary_cross_entropy(class_out, classes.float())
 
         total_loss = recon_loss + c_loss
         total_loss.backward()
@@ -101,13 +100,13 @@ for ep in range(EPOCHS):
         optim_Q_gen.step()
     
         ### DISCRIMINATOR ###
-        class_out, _ = Q(images)
+        class_out, _ = Q(images) # class_out is z_fake_gauss
 
         D_fake_gauss = D_gauss(class_out.detach())
-        z_real_gauss, _ = sample_gauss()
+        z_real_gauss = sample_gauss()
         D_real_gauss = D_gauss(z_real_gauss)
 
-        # Discriminator classification loss
+        #Discriminator classification loss
         D_loss_gauss = F.binary_cross_entropy_with_logits(D_real_gauss, one_label) \
                         + F.binary_cross_entropy_with_logits(D_fake_gauss, zero_label)
         
@@ -133,16 +132,7 @@ for ep in range(EPOCHS):
             for tag, value in info.items():
                 logger.scalar_summary(tag, value, batch_i + (DATA_SAMPLES * ep))
 
-        #if ep+1 == EPOCHS: # fix
-            # (3) Log the images
-            #info = {
-            #    'images': [to_np(X_sample.view(-1, 3, h, h)[:log_count]), to_np(images_constant[:log_count])]
-            #}
-
-            #for tag, images in info.items():
-            #    logger.image_summary(tag, images, ep, to_np(labels_constant))
-
     # Save states
     torch.save(Q.state_dict(),f'Q_encoder_weights_{LOSS}.pt')
-    # torch.save(P.state_dict(),f'P_decoder_weights_{LOSS}.pt')
+    torch.save(P.state_dict(),f'P_decoder_weights_{LOSS}.pt')
     #torch.save(D_gauss.state_dict(),'D_discriminator_gauss_weights.pt')

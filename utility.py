@@ -1,6 +1,6 @@
 import torch
 from torch import nn, Tensor
-from parameters import BATCH_SIZE, DATA_SAMPLES, CRIT_THRESHOLD, MINERL_SAMPLES, LHV_IMG_COUNT
+from parameters import *
 import numpy as np
 from PIL import Image
 import random
@@ -34,15 +34,26 @@ def prepare_rgb_image(img_array): # numpy_array
 
     return img_array, image
 
-def sample_gauss():
-    sample = torch.randn((BATCH_SIZE, 2), device='cuda')
-    labels = torch.clone(sample)
-    
-    labels[labels < CRIT_THRESHOLD] = 0 # already one hot version
-    labels[labels >= CRIT_THRESHOLD] = 1
+def sample_gauss(labels=None):
+    if labels is None:
+        return torch.randn((BATCH_SIZE, NUM_CLASSES), device=device)
+    else:
+        sample = torch.empty((BATCH_SIZE, NUM_CLASSES), dtype=torch.float32, device=device)
 
-    return sample, labels
+        for i, _ in enumerate(sample):
+            label = labels[i].item()
+            val = torch.randn(1)
 
+            if label == 0:
+                while(-1 <= val <= 1): # image is low value but val is in high value range?
+                    val = torch.randn(1) # then generate new value
+            else:
+                while(val < -1 and val > 1): # vice versa
+                    val = torch.randn(1) 
+
+            sample[i] = torch.cat((val, val), dim=0)
+
+        return sample
 
 def get_critic_labels(preds):
     labels = []
@@ -56,45 +67,55 @@ def get_critic_labels(preds):
 
     return torch.as_tensor(labels)
 
-def prepare_data(data, critic, device, shuffle=True):
+def prepare_data(data, critic, shuffle=True):
     print('preparing data...')
     final_dset = []
-    num_samples = data.shape[0]
-
-    low_value_images = []
     high_value_images = []
 
-    for batch_i in range(0, num_samples, BATCH_SIZE):        
+    num_samples = data.shape[0]
+
+    for _ in range(0, num_samples, BATCH_SIZE):
         # Preprocess
-        images = data[batch_i:batch_i+BATCH_SIZE].astype(np.float32)
+        #images = data[batch_i:batch_i+BATCH_SIZE].astype(np.float32)
+        images = data[-BATCH_SIZE:].astype(np.float32)
         images = images.transpose(0, 3, 1, 2) # Transpose observations to be channel-first (BCHW instead of BHWC)
         images /= 255.0 # Normalize observations. Do this here to avoid using too much memory (images are uint8 by default)
-        images = Tensor(images).to(device)
+        images = Tensor(images).to(torch.device('cpu'))
+
+        data = data[0:-BATCH_SIZE] # to use less memory?
 
         preds, _ = critic.evaluate(images)
         labels = get_critic_labels(preds)
-        images = images.detach().cpu().numpy()
+        images = images.detach().numpy()
 
         # Save (img, label)-tuple for low/high-value images respectively
-        low_value_images.extend((images[i], label) for i, label in enumerate(labels) if label == 0)
-        high_value_images.extend((images[i], label) for i, label in enumerate(labels) if label == 1)
+        if len(final_dset) >= LHV_IMG_COUNT and len(high_value_images) >= LHV_IMG_COUNT:
+            break
+
+        if len(final_dset) < LHV_IMG_COUNT:
+            final_dset.extend((images[i], label) for i, label in enumerate(labels) if label == 0)
+        if len(high_value_images) < LHV_IMG_COUNT:
+            high_value_images.extend((images[i], label) for i, label in enumerate(labels) if label == 1)
 
     # Make sure enough images were collected
-    assert len(low_value_images) >= LHV_IMG_COUNT
+    assert len(final_dset) >= LHV_IMG_COUNT
     assert len(high_value_images) >= LHV_IMG_COUNT
 
     # Randomize which images get chosen
-    if shuffle:
-        np.random.shuffle(low_value_images)
-        np.random.shuffle(high_value_images)
+    #if shuffle:
+    #    np.random.shuffle(final_dset)
+    #    np.random.shuffle(high_value_images)
 
-    final_dset.extend(low_value_images[0:LHV_IMG_COUNT])
+    final_dset = final_dset[0:LHV_IMG_COUNT]
     final_dset.extend(high_value_images[0:LHV_IMG_COUNT])
     final_dset = np.array(final_dset, dtype=object)
+
+    del high_value_images
     
     # Randomize order of high and low value images
     if not shuffle:
         np.random.seed(1) # Shuffle high- and low-value-images but keep randomization the same for plotting
+    
     np.random.shuffle(final_dset)
 
     return final_dset
@@ -113,11 +134,7 @@ def load_minerl_data(data, shuffle=True):
         for dataset_observation, _, _, _, _ in trajectory:
             all_pov_obs.append(dataset_observation["pov"])
         if len(all_pov_obs) >= MINERL_SAMPLES:
-            length = len(all_pov_obs)
-            excess = length % BATCH_SIZE
-            all_pov_obs = all_pov_obs[:length-excess] # cut off excess
+            dset = np.array(all_pov_obs)
             break
 
-    all_pov_obs = np.array(all_pov_obs)
-
-    return all_pov_obs
+    return dset
