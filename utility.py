@@ -34,26 +34,24 @@ def prepare_rgb_image(img_array): # numpy_array
 
     return img_array, image
 
-def sample_gauss(labels=None):
-    if labels is None:
-        return torch.randn((BATCH_SIZE, NUM_CLASSES), device=device)
-    else:
-        sample = torch.empty((BATCH_SIZE, NUM_CLASSES), dtype=torch.float32, device=device)
+def prior_sample(label):
+    sample = torch.randn(512)
 
-        for i, _ in enumerate(sample):
-            label = labels[i].item()
-            val = torch.randn(1)
+    for i, val in enumerate(sample):
+        if label == 1:
+            while(val < -1 and val > 1): # high value image in wrong range
+                val = torch.randn(1)
+        else: # label == 0
+            while(-1 <= val <= 1): # low value image in wrong range
+                val = torch.randn(1)
+        
+        sample[i] = val
+    
+    return sample
 
-            if label == 0:
-                while(-1 <= val <= 1): # image is low value but val is in high value range?
-                    val = torch.randn(1) # then generate new value
-            else:
-                while(val < -1 and val > 1): # vice versa
-                    val = torch.randn(1) 
 
-            sample[i] = torch.cat((val, val), dim=0)
-
-        return sample
+def sample_gauss():
+    return torch.randn((BATCH_SIZE, NUM_CLASSES), device=device)
 
 def get_critic_labels(preds):
     labels = []

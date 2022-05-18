@@ -1,10 +1,8 @@
-from turtle import forward
 import torch
 from torch import nn, Tensor
-import torch.nn.functional as F
 import numpy as np
 
-from parameters import NUM_CLASSES
+from parameters import NUM_CLASSES, bottleneck
 
 #Encoder
 class Q_net(nn.Module):  
@@ -31,12 +29,9 @@ class Q_net(nn.Module):
                         nn.ReLU(),
                     )
         
-        self.plot_output = nn.Linear(512, NUM_CLASSES, bias=False)
+        self.plot_output = nn.Linear(32, NUM_CLASSES, bias=False)
 
         self.class_output = nn.Sequential(
-                                nn.LazyLinear(512),
-                                nn.BatchNorm1d(512),
-                                nn.ReLU(),
                                 nn.LazyLinear(NUM_CLASSES),
                                 nn.Sigmoid() 
                         )
@@ -73,7 +68,7 @@ class Q_net(nn.Module):
 
 # Decoder
 class P_net(nn.Module):  
-    def __init__(self, X_dim, N, z_dim, inner_shape=[4, 4, 32]):
+    def __init__(self, X_dim, N, z_dim, inner_shape=bottleneck):
         super(P_net, self).__init__()
 
         self.model = nn.Sequential(
@@ -104,25 +99,17 @@ class P_net(nn.Module):
                     )
 
         self.lin_model = nn.Sequential(
-                            nn.LazyLinear(16),
-                            nn.ReLU(),
-        
-                            nn.LazyLinear(32),
-                            nn.ReLU(),
-
-                            nn.LazyLinear(64),
-                            nn.ReLU(),
-                            
-                            nn.LazyLinear(128),
-                            nn.ReLU(),
-                            
                             nn.LazyLinear(inner_shape[0]*inner_shape[1]*inner_shape[2]),
                             nn.ReLU(),
                         )
     
-    def forward(self, x):
-        #for layer in self.lin_model:
-        #    x = layer(x)
+    def forward(self, x, plot=False):
+        if plot:
+            for layer in self.lin_model:
+                x = layer(x)
+            
+            unflatten = nn.Unflatten(1, [32, 4, 4])
+            x = unflatten(x)
 
         for layer in self.model:
             x = layer(x)

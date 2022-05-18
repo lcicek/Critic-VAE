@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from scipy.stats import gaussian_kde
+import sys
 
 from nets import *
 from parameters import *
@@ -12,6 +13,20 @@ from utility import *
 
 SEPARATE_IMAGES = True
 NORMALIZE = False
+DECODER = False
+
+def plot_reconstructed(decoder, r0=(-2, 2), r1=(-2, 2), n=20):
+    w = 64
+    img = np.zeros((n*w, n*w, 3))
+    for i, y in enumerate(np.linspace(*r1, n)):
+        for j, x in enumerate(np.linspace(*r0, n)):
+            z = torch.Tensor([[x, y]]).to(device)
+            x_hat = decoder.forward(z, plot=True)
+            x_hat, _ = prepare_rgb_image(to_np(x_hat.view(-1, 3, w, w)[0]))
+            img[(n-1-i)*w:(n-1-i+1)*w, j*w:(j+1)*w] = x_hat
+    
+    plt.imshow(img.astype(np.uint8), extent=[*r0, *r1])
+    plt.show()
 
 def init_subplots():
     zero_plot = plt.subplot(121)    
@@ -66,6 +81,16 @@ except:
     print(f'using {matplotlib.get_backend()} instead')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+if DECODER:
+    try:
+        P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
+        P.load_state_dict(torch.load('P_decoder_weights_RCD.pt'))
+    except Exception as e:
+        print(e)
+
+    plot_reconstructed(P)
+    sys.exit()
 
 critic = Critic().to(device)
 critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
