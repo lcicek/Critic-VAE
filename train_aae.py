@@ -40,15 +40,15 @@ with torch.no_grad():
     _ = D(z_sample)
     Q.train()
 
-optim_P = torch.optim.Adam(P.parameters(), lr=gen_lr)
-optim_Q_enc = torch.optim.Adam(Q.parameters(), lr=gen_lr)
+optim_P = torch.optim.Adam(P.parameters(), lr=0.0001)
+optim_Q_enc = torch.optim.Adam(Q.parameters(), lr=0.0001)
 
 #regularizing optimizers
 optimizer_class = torch.optim.SGD
 optim_Q_gen = optimizer_class(Q.parameters(), lr=0.001) # Generator
 optim_D = optimizer_class(D.parameters(), lr=0.05, momentum=0.25) # Discriminator classification
 
-scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optim_Q_gen, milestones=[5], gamma=5, verbose=True)
+scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optim_Q_gen, milestones=[5], gamma=4, verbose=True)
 scheduler2 = torch.optim.lr_scheduler.StepLR(optim_D, step_size=5, gamma=0)
 
 one_label = torch.ones((BATCH_SIZE, 1), device='cuda')

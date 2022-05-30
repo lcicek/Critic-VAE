@@ -60,7 +60,7 @@ for i, img_file in enumerate(folder):
         ps = torch.rand(32).to(device) # random values
         ps_prob1 = (ps.unsqueeze(0))[0][0].item()
 
-        print(f'class-error: {class_error:.2f}, d-fake: {D_fake:.2f}, d-real: {D_real:.2f}, random: {ps_prob1:.2f}')
+        print(f'img: {i:03d}, class-error: {class_error:.2f}, d-fake: {D_fake:.2f}, d-real: {D_real:.2f}, random: {ps_prob1:.2f}')
 
         conc_h = np.concatenate((to_np(img_tensor.view(-1, 3, h, h)[0]), to_np(X_sample.view(-1, 3, h, h)[0])), axis=2)
         _, img = prepare_rgb_image(conc_h)
