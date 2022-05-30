@@ -36,7 +36,7 @@ def prepare_rgb_image(img_array): # numpy_array
     return img_array, image
 
 def prior_sample(label):
-    sample = torch.rand(32).to(device)
+    sample = torch.rand(z_dim).to(device)
 
     if label == 0:
         sample = (sample * -0.5) + 0.5 # to range [0, 0.5]
@@ -49,7 +49,7 @@ def prior_sample(label):
 def sample_gauss(labels):
     # return torch.randn(BATCH_SIZE, 32, 1, 1).to(device)
 
-    all_samples = torch.empty(BATCH_SIZE, 32, 1, 1).to(device) # bottleneck shape
+    all_samples = torch.empty(BATCH_SIZE, z_dim, 1, 1).to(device) # bottleneck shape
     unflatten = nn.Unflatten(0, bottleneck)
 
     for i, label in enumerate(labels): # loop is very slow

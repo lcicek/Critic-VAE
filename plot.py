@@ -13,9 +13,9 @@ from utility import *
 
 SEPARATE_IMAGES = True
 NORMALIZE = False
-DECODER = False
+DECODER = True
 
-def plot_reconstructed(decoder, r0=(-10, 10), r1=(-10, 10), n=1):
+def plot_reconstructed(decoder, r0=(-5, 10), r1=(-10, 5), n=12):
     w = 16
     img = np.zeros((n*w, n*w, 3))
     for i, y in enumerate(np.linspace(*r1, n)):
@@ -42,20 +42,13 @@ def init_subplots():
 def subplot(subplot, images, labels):
     with torch.no_grad():
             z = Q.get_plot_output(images).to(device) # 32 dimensional
-            #torch.manual_seed(0) # prevent linear from being random
-            #linear = torch.nn.LazyLinear(NUM_CLASSES).to(device)
-            #z = linear(z) # 2dim
             z = z.detach().to('cpu').numpy()
-            #z_norm = (z - z.min())/(z.max() - z.min()) # normalize
 
-            #lda = LDA(n_components=0)
-            #z = lda.fit_transform(z, y=labels)
-
-            if NORMALIZE:
-                # Normalize data to range [0, 1] so plotting doesn't vary
-                z_min = np.min(z, axis=0, keepdims=True) # axis 0 since shape is batch_size, _, _, _
-                z_max_min = np.max(z, axis=0, keepdims=True) - z_min
-                z = (z - z_min) / z_max_min
+            #if NORMALIZE:
+            #    # Normalize data to range [0, 1] so plotting doesn't vary
+            #    z_min = np.min(z, axis=0, keepdims=True) # axis 0 since shape is batch_size, _, _, _
+            #    z_max_min = np.max(z, axis=0, keepdims=True) - z_min
+            #    z = (z - z_min) / z_max_min
 
     x = z[:, 0]
     y = z[:, 1]
@@ -92,7 +85,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if DECODER:
     try:
         P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
-        P.load_state_dict(torch.load('saved-networks/P_decoder_weights.pt'))
+        P.load_state_dict(torch.load('P_decoder_weights.pt'))
     except Exception as e:
         print(e)
 

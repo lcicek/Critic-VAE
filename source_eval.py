@@ -16,7 +16,7 @@ critic.load_state_dict(torch.load(CRITIC_PATH, map_location=device))
 
 Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
-D = D_net(32, 32).to(device)
+D = D_net(z_dim, z_dim).to(device)
 
 try:
     Q.load_state_dict(torch.load('Q_encoder_weights.pt'))
@@ -28,6 +28,7 @@ except Exception as e:
 Q.eval()
 P.eval()
 D.eval()
+critic.eval()
 
 folder = os.listdir(EVAL_IMAGES_PATH)
 for i, img_file in enumerate(folder):
@@ -57,7 +58,7 @@ for i, img_file in enumerate(folder):
         one_prob = class_out[0][1].item()
         class_error = one_prob if label == 0 else zero_prob
 
-        ps = torch.rand(32).to(device) # random values
+        ps = torch.rand(z_dim).to(device) # random values
         ps_prob1 = (ps.unsqueeze(0))[0][0].item()
 
         print(f'img: {i:03d}, class-error: {class_error:.2f}, d-fake: {D_fake:.2f}, d-real: {D_real:.2f}, random: {ps_prob1:.2f}')

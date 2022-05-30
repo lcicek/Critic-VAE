@@ -93,11 +93,12 @@ class P_net(nn.Module):
                         )
     
     def forward(self, x, plot=False):
+        from parameters import z_dim
         if plot:
             for layer in self.lin_model:
                 x = layer(x)
             
-            unflatten = nn.Unflatten(1, [32, 1, 1])
+            unflatten = nn.Unflatten(1, [z_dim, 1, 1])
             x = unflatten(x)
 
         for layer in self.model:

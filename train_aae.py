@@ -32,7 +32,7 @@ dset = prepare_data(all_pov_obs, critic)
 ### Initialize networks ###
 Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
-D = D_net(32, 32).to(device)
+D = D_net(z_dim, z_dim).to(device)
 
 with torch.no_grad():
     Q.eval()

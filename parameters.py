@@ -13,7 +13,7 @@ CRIT_THRESHOLD = 0.7
 
 n_channels = 3      # Input channels (3 for RGB)
 n = 12              # Base amount/multiplier for n_channels of Conv2D
-z_dim = 32          # Dimension of latent representation
+z_dim = 64          # Dimension of latent representation
 eps = 1e-1
 
 gen_lr = 0.00005
@@ -22,7 +22,7 @@ reg_lr = 0.00005
 collect = BATCH_SIZE * 30  # images are logged every "collect"-step
 log_count = 10              # amount of images that should be logged
 h = 16 # image height (=width)
-bottleneck = [32, 1, 1]
+bottleneck = [64, 1, 1]
 
 ### PATHS ###
 SAVE_PATH = '/homes/lcicek/Desktop/AAE/images' # change 
