@@ -9,34 +9,28 @@ class Q_net(nn.Module):
     def __init__(self, X_dim, N, z_dim):
         super(Q_net, self).__init__()
         self.model = nn.Sequential(
-                        nn.Conv2d(X_dim, N, 3, 1, 1),
+                        nn.Conv2d(X_dim, N, 5, 1, 2),
                         nn.MaxPool2d(2,2),
                         nn.ReLU(),
                         
-                        nn.Conv2d(N, 2 * N, 3, 1, 1),
+                        nn.Conv2d(N, 2 * N, 5, 1, 2),
                         nn.BatchNorm2d(2 * N),
                         nn.MaxPool2d(2),
                         nn.ReLU(),
                         
-                        nn.Conv2d(2 * N, 4 * N, 3, 1, 1),
+                        nn.Conv2d(2 * N, 4 * N, 5, 1, 2),
                         nn.BatchNorm2d(4 * N),
                         nn.MaxPool2d(2,2),
                         nn.ReLU(),
                         
-                        nn.Conv2d(4 * N, z_dim, 3, 1, 1),
+                        nn.Conv2d(4 * N, z_dim, 5, 1, 2),
                         nn.BatchNorm2d(z_dim),
                         nn.MaxPool2d(2,2),
                         nn.ReLU(),
                     )
-        
-        self.plot_output = nn.Linear(32, NUM_CLASSES, bias=False)
 
-        self.class_output = nn.Sequential(
-                                nn.LazyLinear(NUM_CLASSES),
-                                nn.Sigmoid() 
-                        )
-
-        self.wc = nn.Parameter(torch.randn((NUM_CLASSES, 10)))
+        self.reduce_dim = nn.LazyLinear(NUM_CLASSES)
+        self.class_output = nn.Sigmoid()
         
     def forward(self, x_in):
         for layer in self.model:
@@ -44,21 +38,16 @@ class Q_net(nn.Module):
 
         x_model = x_in
         conv_out = torch.flatten(x_model, 1)
-
-        class_out = conv_out
-        for layer in self.class_output:
-            class_out = layer(class_out)
+        class_out = self.class_output(self.reduce_dim(conv_out))
         
         return class_out, x_model
 
     def get_plot_output(self, x):
         with torch.no_grad():
             conv_out = torch.flatten(self.model(x), 1)
-            p_out = self.plot_output(conv_out)
+            class_out = self.class_output(self.reduce_dim(conv_out))
 
-        print(p_out)
-
-        return p_out
+        return class_out #self.reduce_dim(conv_out)
 
     def get_shape(self, x):
         x = self.model(x)
@@ -78,23 +67,23 @@ class P_net(nn.Module):
                         #nn.ReLU(),
                         #nn.Upsample(scale_factor=2),  
 
-                        nn.Conv2d(z_dim, 4 * N, 3, 1, 1),
+                        nn.Conv2d(z_dim, 4 * N, 5, 1, 2),
                         nn.ReLU(),
                         nn.Upsample(scale_factor=2),
                         
-                        nn.Conv2d(4 * N, 2 * N, 3, 1, 1),
+                        nn.Conv2d(4 * N, 2 * N, 5, 1, 2),
                         nn.ReLU(),
                         nn.Upsample(scale_factor=2),
                         
-                        nn.Conv2d(2 * N, N, 3, 1, 1),
+                        nn.Conv2d(2 * N, N, 5, 1, 2),
                         nn.ReLU(),  
                         nn.Upsample(scale_factor=2),
 
-                        nn.Conv2d(N, N, 3, 1, 1),
+                        nn.Conv2d(N, N, 5, 1, 2),
                         nn.ReLU(),
                         nn.Upsample(scale_factor=2),
                         
-                        nn.Conv2d(N, X_dim, 3, 1, 1),
+                        nn.Conv2d(N, X_dim, 5, 1, 2),
                         nn.Sigmoid()
                     )
 
@@ -108,7 +97,7 @@ class P_net(nn.Module):
             for layer in self.lin_model:
                 x = layer(x)
             
-            unflatten = nn.Unflatten(1, [32, 4, 4])
+            unflatten = nn.Unflatten(1, [32, 1, 1])
             x = unflatten(x)
 
         for layer in self.model:
@@ -121,20 +110,19 @@ class D_net(nn.Module):
     def __init__(self, in_dim, N):
         super(D_net, self).__init__()
         self.model = nn.Sequential(
+                        nn.Flatten(),
                         nn.Linear(in_dim, N),
                         nn.ReLU(),
                         nn.Linear(N, N),
                         nn.ReLU(),
-                        nn.Linear(N, N),
-                        nn.ReLU(), 
-                        nn.Linear(N, N),
-                        nn.ReLU(),
                         nn.Linear(N, 1),
-                        # nn.Sigmoid() # commented out because of BCEwithLogits
+                        nn.Sigmoid() # comment out when using BCEwithLogits
                     )
     
     def forward(self, x):
-        return self.model(x)
+        for layer in self.model:
+            x = layer(x)
+        return x
 
 class Critic(nn.Module):
     def __init__(self, width=64, dims=[8, 8, 8, 16], bottleneck=32, colorchs=3,

@@ -1,3 +1,4 @@
+from tabnanny import verbose
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -31,12 +32,12 @@ dset = prepare_data(all_pov_obs, critic)
 ### Initialize networks ###
 Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
-D_gauss = D_net(NUM_CLASSES, 64).to(device)
+D = D_net(32, 32).to(device)
 
 with torch.no_grad():
     Q.eval()
-    class_out, _= Q(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
-    _ = D_gauss(class_out)
+    _, z_sample = Q(torch.zeros((BATCH_SIZE, n_channels, h, h)).to(device))
+    _ = D(z_sample)
     Q.train()
 
 optim_P = torch.optim.Adam(P.parameters(), lr=gen_lr)
@@ -44,11 +45,11 @@ optim_Q_enc = torch.optim.Adam(Q.parameters(), lr=gen_lr)
 
 #regularizing optimizers
 optimizer_class = torch.optim.SGD
-optim_Q_gen = optimizer_class(Q.parameters(), lr=reg_lr, momentum=0.1) # Generator
-optim_D_gauss = optimizer_class(D_gauss.parameters(), lr=reg_lr, momentum=0.1) # Discriminator classification
+optim_Q_gen = optimizer_class(Q.parameters(), lr=0.001) # Generator
+optim_D = optimizer_class(D.parameters(), lr=0.05, momentum=0.25) # Discriminator classification
 
-scheduler1 = torch.optim.lr_scheduler.ConstantLR(optim_Q_gen, factor=eps, total_iters=1000)
-scheduler2 = torch.optim.lr_scheduler.ConstantLR(optim_D_gauss, factor=eps, total_iters=1000)
+scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optim_Q_gen, milestones=[5], gamma=5, verbose=True)
+scheduler2 = torch.optim.lr_scheduler.StepLR(optim_D, step_size=5, gamma=0)
 
 one_label = torch.ones((BATCH_SIZE, 1), device='cuda')
 zero_label = torch.zeros((BATCH_SIZE, 1), device='cuda')
@@ -68,14 +69,15 @@ for ep in range(EPOCHS):
 
         all_data = dset[batch_indices]
         
-        images = Tensor(np.array([d[0] for d in all_data])).to(device)
+        images = np.array([d[0] for d in all_data])
+        images = Tensor(images).to(device)
         labels = Tensor(np.array([d[1] for d in all_data])).to(device)
         classes = F.one_hot(labels.long(), num_classes=NUM_CLASSES)
 
         optim_P.zero_grad()
         optim_Q_enc.zero_grad()
         optim_Q_gen.zero_grad()
-        optim_D_gauss.zero_grad()
+        optim_D.zero_grad()
 
         ### Autoencoder and Classifier ###
         class_out, z_sample = Q(images)
@@ -91,30 +93,26 @@ for ep in range(EPOCHS):
         optim_Q_enc.step()
 
         ### GENERATOR ###
-        class_out, _ = Q(images)
-        D_fake_gauss = D_gauss(class_out)
+        _, z_sample = Q(images)
+        D_fake = D(z_sample)
         
         # Generator loss
-        G_loss = F.binary_cross_entropy_with_logits(D_fake_gauss, one_label)
+        G_loss = F.binary_cross_entropy_with_logits(D_fake, one_label)
         G_loss.backward()
         optim_Q_gen.step()
     
         ### DISCRIMINATOR ###
-        class_out, _ = Q(images) # class_out is z_fake_gauss
-
-        D_fake_gauss = D_gauss(class_out.detach())
-        z_real_gauss = sample_gauss()
-        D_real_gauss = D_gauss(z_real_gauss)
+        D_fake = D(z_sample.detach())
+        z_real = sample_gauss(labels)
+        D_real = D(z_real)
 
         #Discriminator classification loss
-        D_loss_gauss = F.binary_cross_entropy_with_logits(D_real_gauss, one_label) \
-                        + F.binary_cross_entropy_with_logits(D_fake_gauss, zero_label)
-        
-        D_loss_gauss.backward()
-        optim_D_gauss.step()
+        real_loss =  F.binary_cross_entropy(D_real, one_label)
+        fake_loss = F.binary_cross_entropy(D_fake, zero_label)
+        D_loss = real_loss + fake_loss
 
-        scheduler1.step()
-        scheduler2.step()
+        D_loss.backward()
+        optim_D.step()
 
         #============ TensorBoard logging ============# 
         # Log after each epoch
@@ -125,14 +123,18 @@ for ep in range(EPOCHS):
             info = {
                 'recon_loss': recon_loss.item(),
                 'classifier_loss': c_loss.item(),
-                'discriminator_loss_gauss': D_loss_gauss.item(),
+                'discriminator_real_loss': real_loss.item(),
+                'discriminator_fake_loss': fake_loss.item(),
                 'generator_loss': G_loss.item(),
             }
 
             for tag, value in info.items():
                 logger.scalar_summary(tag, value, batch_i + (DATA_SAMPLES * ep))
 
-    # Save states
-    torch.save(Q.state_dict(),f'Q_encoder_weights_{LOSS}.pt')
-    torch.save(P.state_dict(),f'P_decoder_weights_{LOSS}.pt')
-    #torch.save(D_gauss.state_dict(),'D_discriminator_gauss_weights.pt')
+    scheduler1.step()
+    scheduler2.step()
+
+# Save states
+torch.save(Q.state_dict(),'Q_encoder_weights.pt')
+torch.save(P.state_dict(),'P_decoder_weights.pt')
+torch.save(D.state_dict(),'D_discriminator_weights.pt')

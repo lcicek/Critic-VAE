@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 import random
 import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
+import cv2
 
 def to_np(x):
     return x.data.cpu().numpy()
@@ -35,23 +36,28 @@ def prepare_rgb_image(img_array): # numpy_array
     return img_array, image
 
 def prior_sample(label):
-    sample = torch.randn(512)
+    sample = torch.rand(32).to(device)
 
-    for i, val in enumerate(sample):
-        if label == 1:
-            while(val < -1 and val > 1): # high value image in wrong range
-                val = torch.randn(1)
-        else: # label == 0
-            while(-1 <= val <= 1): # low value image in wrong range
-                val = torch.randn(1)
-        
-        sample[i] = val
-    
+    if label == 0:
+        sample = (sample * -0.5) + 0.5 # to range [0, 0.5]
+
+    else:
+        sample = (sample * -0.5) + 1.5 # to range [1.0, 1.5]
+
     return sample
 
+def sample_gauss(labels):
+    # return torch.randn(BATCH_SIZE, 32, 1, 1).to(device)
 
-def sample_gauss():
-    return torch.randn((BATCH_SIZE, NUM_CLASSES), device=device)
+    all_samples = torch.empty(BATCH_SIZE, 32, 1, 1).to(device) # bottleneck shape
+    unflatten = nn.Unflatten(0, bottleneck)
+
+    for i, label in enumerate(labels): # loop is very slow
+        sample = prior_sample(label)
+        sample = unflatten(sample)
+        all_samples[i] = sample
+
+    return all_samples
 
 def get_critic_labels(preds):
     labels = []
@@ -84,16 +90,24 @@ def prepare_data(data, critic, shuffle=True):
 
         preds, _ = critic.evaluate(images)
         labels = get_critic_labels(preds)
+
         images = images.detach().numpy()
+        imgs = np.empty((BATCH_SIZE, 3, 16, 16)).astype(np.float32)
+        
+        for i, image in enumerate(images): # downscale
+            image = image.transpose(1, 2, 0) # CHW to HWC
+            image = cv2.resize(image, dsize=(h, h))
+            image = image.transpose(2, 0, 1) # back to CHW
+            imgs[i] = image
 
         # Save (img, label)-tuple for low/high-value images respectively
         if len(final_dset) >= LHV_IMG_COUNT and len(high_value_images) >= LHV_IMG_COUNT:
             break
 
         if len(final_dset) < LHV_IMG_COUNT:
-            final_dset.extend((images[i], label) for i, label in enumerate(labels) if label == 0)
+            final_dset.extend((imgs[i], label) for i, label in enumerate(labels) if label == 0)
         if len(high_value_images) < LHV_IMG_COUNT:
-            high_value_images.extend((images[i], label) for i, label in enumerate(labels) if label == 1)
+            high_value_images.extend((imgs[i], label) for i, label in enumerate(labels) if label == 1)
 
     # Make sure enough images were collected
     assert len(final_dset) >= LHV_IMG_COUNT

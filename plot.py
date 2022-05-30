@@ -15,8 +15,8 @@ SEPARATE_IMAGES = True
 NORMALIZE = False
 DECODER = False
 
-def plot_reconstructed(decoder, r0=(-2, 2), r1=(-2, 2), n=20):
-    w = 64
+def plot_reconstructed(decoder, r0=(-10, 10), r1=(-10, 10), n=1):
+    w = 16
     img = np.zeros((n*w, n*w, 3))
     for i, y in enumerate(np.linspace(*r1, n)):
         for j, x in enumerate(np.linspace(*r0, n)):
@@ -41,8 +41,15 @@ def init_subplots():
 
 def subplot(subplot, images, labels):
     with torch.no_grad():
-            z = Q.get_plot_output(images)
+            z = Q.get_plot_output(images).to(device) # 32 dimensional
+            #torch.manual_seed(0) # prevent linear from being random
+            #linear = torch.nn.LazyLinear(NUM_CLASSES).to(device)
+            #z = linear(z) # 2dim
             z = z.detach().to('cpu').numpy()
+            #z_norm = (z - z.min())/(z.max() - z.min()) # normalize
+
+            #lda = LDA(n_components=0)
+            #z = lda.fit_transform(z, y=labels)
 
             if NORMALIZE:
                 # Normalize data to range [0, 1] so plotting doesn't vary
@@ -85,7 +92,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if DECODER:
     try:
         P = P_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
-        P.load_state_dict(torch.load('P_decoder_weights_RCD.pt'))
+        P.load_state_dict(torch.load('saved-networks/P_decoder_weights.pt'))
     except Exception as e:
         print(e)
 
@@ -99,8 +106,9 @@ Q = Q_net(X_dim=n_channels, N=n, z_dim=z_dim).to(device)
 
 try:
     dset = torch.load('plot_dataset.pt')
-    Q.load_state_dict(torch.load('Q_encoder_weights_RCD.pt'))
+    Q.load_state_dict(torch.load('Q_encoder_weights.pt'))
 except Exception as e:
+    print('error occured')
     print(e) 
 
 Q.eval()
