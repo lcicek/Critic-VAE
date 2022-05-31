@@ -1,8 +1,4 @@
 from torch.utils.tensorboard import SummaryWriter
-import numpy as np
-
-from parameters import log_count
-from utility import prepare_rgb_image
 
 class Logger(object):
     

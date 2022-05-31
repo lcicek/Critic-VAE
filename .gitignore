@@ -3,5 +3,7 @@ logs
 __pycache__
 __pycache__/*
 images
+aae-images
 saved_models
+unused_files
 plot_dataset.pt

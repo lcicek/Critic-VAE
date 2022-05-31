@@ -1,4 +1,3 @@
-from tabnanny import verbose
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -25,6 +24,7 @@ del data # without this line, error gets thrown at the end of the program
 print('loading critic...')
 critic = Critic().to(torch.device('cpu'))
 critic.load_state_dict(torch.load(CRITIC_PATH, map_location='cpu'))
+critic.eval()
 
 ### Preprocess minerl data; Divide evenly into high/low-value images ###
 dset = prepare_data(all_pov_obs, critic)

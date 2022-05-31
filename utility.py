@@ -71,7 +71,7 @@ def get_critic_labels(preds):
 
     return torch.as_tensor(labels)
 
-def prepare_data(data, critic, shuffle=True):
+def prepare_data(data, critic, resize=True, shuffle=True):
     print('preparing data...')
     final_dset = []
     high_value_images = []
@@ -92,13 +92,17 @@ def prepare_data(data, critic, shuffle=True):
         labels = get_critic_labels(preds)
 
         images = images.detach().numpy()
-        imgs = np.empty((BATCH_SIZE, 3, 16, 16)).astype(np.float32)
-        
-        for i, image in enumerate(images): # downscale
-            image = image.transpose(1, 2, 0) # CHW to HWC
-            image = cv2.resize(image, dsize=(h, h))
-            image = image.transpose(2, 0, 1) # back to CHW
-            imgs[i] = image
+
+        if resize:
+            imgs = np.empty((BATCH_SIZE, n_channels, h, h)).astype(np.float32)
+            
+            for i, image in enumerate(images): # downscale
+                image = image.transpose(1, 2, 0) # CHW to HWC
+                image = cv2.resize(image, dsize=(h, h))
+                image = image.transpose(2, 0, 1) # back to CHW
+                imgs[i] = image
+        else:
+            imgs = images
 
         # Save (img, label)-tuple for low/high-value images respectively
         if len(final_dset) >= LHV_IMG_COUNT and len(high_value_images) >= LHV_IMG_COUNT:
