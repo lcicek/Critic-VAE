@@ -49,12 +49,6 @@ class Q_net(nn.Module):
 
         return class_out #self.reduce_dim(conv_out)
 
-    def get_shape(self, x):
-        x = self.model(x)
-        shape = x.shape[1::]
-        
-        return shape
-
 # Decoder
 class P_net(nn.Module):  
     def __init__(self, X_dim, N, z_dim, inner_shape=bottleneck):

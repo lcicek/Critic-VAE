@@ -18,8 +18,8 @@ logger = Logger('./logs/aae' + str(time())[-5::])
 ### Initialize mineRL dataset ###
 os.environ['MINERL_DATA_ROOT'] = MINERL_DATA_ROOT_PATH
 data = minerl.data.make('MineRLTreechop-v0', num_workers=1)
-all_pov_obs = load_minerl_data(data) # get all minerl observations, divide in 2 for lower memory usage
-del data # without this line errors gets thrown at the end of the program
+all_pov_obs = load_minerl_data(data) # get all minerl observations
+del data # without this line, error gets thrown at the end of the program
 
 ### Load trained critic model ###
 print('loading critic...')
@@ -40,13 +40,13 @@ with torch.no_grad():
     _ = D(z_sample)
     Q.train()
 
-optim_P = torch.optim.Adam(P.parameters(), lr=0.0001)
-optim_Q_enc = torch.optim.Adam(Q.parameters(), lr=0.0001)
+optim_P = torch.optim.Adam(P.parameters(), lr=reg_lr)
+optim_Q_enc = torch.optim.Adam(Q.parameters(), lr=reg_lr)
 
 #regularizing optimizers
 optimizer_class = torch.optim.SGD
-optim_Q_gen = optimizer_class(Q.parameters(), lr=0.001) # Generator
-optim_D = optimizer_class(D.parameters(), lr=0.05, momentum=0.25) # Discriminator classification
+optim_Q_gen = optimizer_class(Q.parameters(), lr=gen_lr) # Generator
+optim_D = optimizer_class(D.parameters(), lr=disc_lr, momentum=0.25) # Discriminator classification
 
 scheduler1 = torch.optim.lr_scheduler.MultiStepLR(optim_Q_gen, milestones=[5], gamma=4, verbose=True)
 scheduler2 = torch.optim.lr_scheduler.StepLR(optim_D, step_size=5, gamma=0)
@@ -117,7 +117,7 @@ for ep in range(EPOCHS):
         #============ TensorBoard logging ============# 
         # Log after each epoch
         # (1) Log the scalar values
-        if batch_i % collect == 0:
+        if batch_i % log_n == 0:
             print(f'step {batch_i + (DATA_SAMPLES * ep)}')
 
             info = {
@@ -135,6 +135,6 @@ for ep in range(EPOCHS):
     scheduler2.step()
 
 # Save states
-torch.save(Q.state_dict(),'Q_encoder_weights.pt')
-torch.save(P.state_dict(),'P_decoder_weights.pt')
-torch.save(D.state_dict(),'D_discriminator_weights.pt')
+torch.save(Q.state_dict(), Q_PATH)
+torch.save(P.state_dict(), P_PATH)
+torch.save(D.state_dict(), D_PATH)
