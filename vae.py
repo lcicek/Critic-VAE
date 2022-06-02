@@ -20,35 +20,51 @@ from utility import load_minerl_data, prepare_data, prepare_rgb_image, to_np
 from logger import Logger
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-t', action='store_true')
+parser.add_argument('-t', action='store_true') # train
+parser.add_argument('-s', action='store_true') # show recons of samples
 args = parser.parse_args()
-TRAIN = args.t
 
-logger = Logger('./logs/vae' + str(time())[-5::])
+TRAIN = args.t
+SHOW_SAMPLE_RECONS = args.s
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-w = 64
+w = 64 # original image width
+epochs = 15
+latent_dim = 64
+bottleneck = 4096 # 4x4x128; bottleneck of convolutional layers
+kld_weight = 0.00005 # https://github.com/AntixK/PyTorch-VAE/issues/11 OR https://github.com/AntixK/PyTorch-VAE/issues/35
 
 class VariationalAutoencoder(nn.Module):
-    def __init__(self, dims=[64, 128, 256, 512]):
+    def __init__(self, dims=[32, 64, 128, 256]):
         super(VariationalAutoencoder, self).__init__()
         self.encoder = VariationalEncoder(dims)
         self.decoder = Decoder(dims)
 
-    def forward(self, x):
+    def forward(self, x, reward):
         mu, logvar = self.encoder(x)
         z_sample = self.reparametrize(mu, logvar)
-        recon = self.decoder(z_sample)
+        recon = self.decoder(z_sample, reward)
 
         return x, mu, logvar, recon
     
-    def several_recons(self, x):
+    def recon_samples(self, x, reward):
         mu, logvar = self.encoder(x)
         recons = []
-        for _ in range(5): # arbitrary amount of samples
-            z_sample = self.reparametrize(mu, logvar)
-            recon = self.decoder(z_sample)
-
+        for _ in range(6):
+            sample = self.reparametrize(mu, logvar)
+            recon = self.decoder(sample, reward)
             recons.append(recon)
+        
+        return recons
+
+    def evaluate(self, x, reward=Tensor([0, 0.2, 0.4, 0.6, 0.8, 1]).to(device)):
+        mu, _ = self.encoder(x)
+
+        recons = []
+        for i in range(6):
+            recon = self.decoder(mu, reward[i].view(1), evalu=True)
+            recons.append(recon)
+        
         return recons
 
     def reparametrize(self, mu, logvar): # logvar is variance
@@ -56,9 +72,7 @@ class VariationalAutoencoder(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std # mean + random * standard-deviation
 
-    def vae_loss(self, x, mu, logvar, recon):
-        kld_weight = 0.0005 # https://github.com/AntixK/PyTorch-VAE/issues/11 OR https://github.com/AntixK/PyTorch-VAE/issues/35
-        
+    def vae_loss(self, x, mu, logvar, recon):        
         recon_loss = F.mse_loss(recon, x)
         kld_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu ** 2 - logvar.exp(), dim = 1), dim = 0)
         
@@ -71,29 +85,30 @@ class VariationalEncoder(nn.Module):
         super(VariationalEncoder, self).__init__()
 
         self.model = nn.Sequential(
-                        nn.Conv2d(3, dims[0], 5, 1, 2), # to 64x64x64
-                        nn.MaxPool2d(4), # to 16x16x64
+                        nn.Conv2d(3, dims[0], 5, 1, 2), # to 64x64x32
+                        nn.BatchNorm2d(dims[0]),
+                        nn.MaxPool2d(2), # to 32x32x32
+                        nn.ReLU(),
+
+                        nn.Conv2d(dims[0], dims[1], 5, 1, 2), # to 32x32x64
+                        nn.BatchNorm2d(dims[1]),
+                        nn.MaxPool2d(2), # to 16x16x64
                         nn.ReLU(),
                         
-                        nn.Conv2d(dims[0], dims[1], 5, 1, 2), # to 16x16x128
-                        nn.BatchNorm2d(dims[1]),
+                        nn.Conv2d(dims[1], dims[2], 5, 1, 2), # to 16x16x128
+                        nn.BatchNorm2d(dims[2]),
                         nn.MaxPool2d(2), # to 8x8x128
                         nn.ReLU(),
                         
-                        nn.Conv2d(dims[1], dims[2], 5, 1, 2), # to 8x8x256
-                        nn.BatchNorm2d(dims[2]),
-                        nn.MaxPool2d(2), # to 4x4x256
-                        nn.ReLU(),
-                        
-                        nn.Conv2d(dims[2], dims[3], 5, 1, 2), # to 4x4x512
+                        nn.Conv2d(dims[2], dims[3], 5, 1, 2), # to 8x8x256
                         nn.BatchNorm2d(dims[3]),
-                        nn.MaxPool2d(2),# to 2x2x512
+                        nn.MaxPool2d(2), # to 4x4x256
                         nn.ReLU(),
                     )
 
-        # mu = mean, sigma = var
-        self.fc_mu = nn.Linear(2048, 256) # 2*2*512=2048; "fc" = fully connected layer
-        self.fc_var = nn.Linear(2048, 256)
+        # mu = mean, sigma = var; "fc" = fully connected layer
+        self.fc_mu = nn.Linear(bottleneck, latent_dim)
+        self.fc_var = nn.Linear(bottleneck, latent_dim)
 
     def forward(self, x):
         for layer in self.model:
@@ -124,17 +139,20 @@ class Decoder(nn.Module):
 
                         nn.Conv2d(dims[0], dims[0], 5, 1, 2),
                         nn.ReLU(),
-                        nn.Upsample(scale_factor=4),
+                        nn.Upsample(scale_factor=2),
                         
                         nn.Conv2d(dims[0], 3, 5, 1, 2),
                         nn.Tanh() # tanh-range is [-1, 1], sigmoid is [0, 1]
                     )
         
-        self.decoder_input = nn.Linear(256, 2048)
+        self.decoder_input = nn.Linear(latent_dim+1, bottleneck)
 
-    def forward(self, z):
-        X = self.decoder_input(z)
-        X = X.view(-1, 512, 2, 2)
+    def forward(self, z, reward, evalu=False, dim=1):
+        if evalu:
+            z = z[0] # batch_size is 1 when evaluating
+            dim = 0
+        X = self.decoder_input(torch.cat((z, reward), dim=dim))
+        X = X.view(-1, 256, 4, 4)
         X = self.model(X)
 
         return X
@@ -144,7 +162,7 @@ def train(autoencoder, dset):
     num_samples = dset.shape[0]
 
     # Start training
-    for ep in range(7): # change
+    for ep in range(epochs): # change
         epoch_indices = np.arange(num_samples)
         np.random.shuffle(epoch_indices)
 
@@ -159,10 +177,10 @@ def train(autoencoder, dset):
             images = np.array([d[0] for d in all_data])
             images = Tensor(images).to(device)
 
-            # preds, _ = critic.evaluate(images)
+            preds, _ = critic.evaluate(images)
 
             opt.zero_grad()
-            out = autoencoder(images)
+            out = autoencoder(images, preds)
             losses = autoencoder.vae_loss(out[0], out[1], out[2], out[3])
             loss = losses['total_loss']
             loss.backward()
@@ -193,17 +211,22 @@ def save_images(autoencoder):
         img_array /= 255
         img_tensor = Tensor(img_array).to(device)
 
-        recons = autoencoder.several_recons(img_tensor)
-        
-        ### SAVE IMAGE ###
+        if SHOW_SAMPLE_RECONS:
+            recons = autoencoder.recon_samples(img_tensor)
+        else:
+            recons = autoencoder.evaluate(img_tensor)
+
         conc_h = np.concatenate((
-                to_np(img_tensor.view(-1, 3, w, w)[0]), 
-                to_np(recons[0].view(-1, 3, w, w)[0]),
-                to_np(recons[1].view(-1, 3, w, w)[0]),
-                to_np(recons[2].view(-1, 3, w, w)[0]),
-                to_np(recons[3].view(-1, 3, w, w)[0]),
-                to_np(recons[4].view(-1, 3, w, w)[0])
+            to_np(img_tensor.view(-1, 3, w, w)[0]),
+            to_np(recons[0].view(-1, 3, w, w)[0]),
+            to_np(recons[1].view(-1, 3, w, w)[0]),
+            to_np(recons[2].view(-1, 3, w, w)[0]),
+            to_np(recons[3].view(-1, 3, w, w)[0]),
+            to_np(recons[4].view(-1, 3, w, w)[0]),
+            to_np(recons[5].view(-1, 3, w, w)[0]),
             ), axis=2)
+
+        ### SAVE IMAGE ###
         _, img = prepare_rgb_image(conc_h)
 
         img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
@@ -238,7 +261,7 @@ del data # without this line, error gets thrown at the end of the program
 
 ### Load trained critic model ###
 print('loading critic...')
-critic = Critic().to(torch.device('cpu'))
+critic = Critic()
 critic.load_state_dict(torch.load(CRITIC_PATH, map_location='cpu'))
 critic.eval()
 
@@ -246,7 +269,10 @@ critic.eval()
 dset = prepare_data(all_pov_obs, critic, resize=False)
 vae = VariationalAutoencoder().to(device) # GPU
 
+critic = critic.to(device)
+
 if TRAIN: # change for training
+    logger = Logger('./logs/vae' + str(time())[-5::])
     vae = train(vae, dset)
 
     torch.save(vae.encoder.state_dict(), 'vae_encoder_weights.pt')
