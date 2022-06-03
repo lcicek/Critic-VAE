@@ -10,9 +10,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 import os
 import minerl
-from PIL import Image
+from PIL import Image, ImageDraw
 from time import time
 import argparse
+import cv2
 
 from nets import Critic
 from parameters import *
@@ -21,11 +22,11 @@ from logger import Logger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', action='store_true') # train
-parser.add_argument('-s', action='store_true') # show recons of samples
+parser.add_argument('-i', action='store_true') # show recons of samples
 args = parser.parse_args()
 
 TRAIN = args.t
-SHOW_SAMPLE_RECONS = args.s
+INJECT = args.i
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 w = 64 # original image width
@@ -57,7 +58,7 @@ class VariationalAutoencoder(nn.Module):
         
         return recons
 
-    def evaluate(self, x, reward=Tensor([0, 0.2, 0.4, 0.6, 0.8, 1]).to(device)):
+    def inject(self, x, reward=Tensor([0, 0.2, 0.4, 0.6, 0.8, 1]).to(device)):
         mu, _ = self.encoder(x)
 
         recons = []
@@ -66,6 +67,12 @@ class VariationalAutoencoder(nn.Module):
             recons.append(recon)
         
         return recons
+
+    def evaluate(self, x, reward):
+        mu, _ = self.encoder(x)
+        recon = self.decoder(mu, reward.view(1), evalu=True)
+
+        return recon
 
     def reparametrize(self, mu, logvar): # logvar is variance
         std = torch.exp(0.5 * logvar) # variance**2 = std
@@ -200,7 +207,7 @@ def train(autoencoder, dset):
 
     return autoencoder
 
-def save_images(autoencoder):
+def save_images(autoencoder, critic):
     folder = os.listdir(EVAL_IMAGES_PATH)
     for i, img_file in enumerate(folder):
         ### LOAD IMAGES AND PREPROCESS ###
@@ -211,24 +218,51 @@ def save_images(autoencoder):
         img_array /= 255
         img_tensor = Tensor(img_array).to(device)
 
-        if SHOW_SAMPLE_RECONS:
-            recons = autoencoder.recon_samples(img_tensor)
-        else:
-            recons = autoencoder.evaluate(img_tensor)
+        preds, _ = critic.evaluate(img_tensor)
 
-        conc_h = np.concatenate((
-            to_np(img_tensor.view(-1, 3, w, w)[0]),
-            to_np(recons[0].view(-1, 3, w, w)[0]),
-            to_np(recons[1].view(-1, 3, w, w)[0]),
-            to_np(recons[2].view(-1, 3, w, w)[0]),
-            to_np(recons[3].view(-1, 3, w, w)[0]),
-            to_np(recons[4].view(-1, 3, w, w)[0]),
-            to_np(recons[5].view(-1, 3, w, w)[0]),
+        if INJECT:
+            orig_recon = autoencoder.evaluate(img_tensor, preds[0])
+            recons = autoencoder.inject(img_tensor)
+
+            conc_h = np.concatenate((
+                to_np(img_tensor.view(-1, 3, w, w)[0]),
+                to_np(orig_recon.view(-1, 3, w, w)[0]),
+                to_np(recons[0].view(-1, 3, w, w)[0]),
+                to_np(recons[1].view(-1, 3, w, w)[0]),
+                to_np(recons[2].view(-1, 3, w, w)[0]),
+                to_np(recons[3].view(-1, 3, w, w)[0]),
+                to_np(recons[4].view(-1, 3, w, w)[0]),
+                to_np(recons[5].view(-1, 3, w, w)[0]),
             ), axis=2)
+        else:
+            if preds[0] < 0.6:
+                continue
+            
+            recon_one = autoencoder.evaluate(img_tensor, torch.ones(1).to(device))
+            recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device))
 
+            recon_one = to_np(recon_one.view(-1, 3, w, w)[0])
+            recon_zero = to_np(recon_zero.view(-1, 3, w, w)[0])
+
+            diff = cv2.subtract(recon_zero, recon_one)
+            diff = abs(diff) * 4
+            #diff[diff < 250] = 0
+            # _, diff = cv2.threshold(diff, 255, 255, cv2.THRESH_BINARY)
+
+            conc_h = np.concatenate((
+                to_np(img_tensor.view(-1, 3, w, w)[0]),
+                recon_one,
+                recon_zero,
+                diff
+            ), axis=2)
+        
         ### SAVE IMAGE ###
         _, img = prepare_rgb_image(conc_h)
 
+        if INJECT:
+            draw = ImageDraw.Draw(img)
+            draw.text((w*1+2, 2), f'{preds[0].item():.1f}', (255,255,255))
+        
         img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
 
 def plot_latent(autoencoder, dset, num_images=BATCH_SIZE*10):
@@ -288,7 +322,7 @@ else:
     vae.encoder.eval()
     vae.decoder.eval()
 
-    save_images(vae)
+    save_images(vae, critic)
 
     if False:
         try:
