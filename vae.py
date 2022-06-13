@@ -6,11 +6,9 @@ import torch.nn.functional as F
 import torch.utils
 import torch.distributions
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
 import os
 import minerl
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 from time import time
 import argparse
 import cv2
@@ -34,6 +32,8 @@ epochs = 15
 latent_dim = 64
 bottleneck = 4096 # 4x4x128; bottleneck of convolutional layers
 kld_weight = 0.00005 # https://github.com/AntixK/PyTorch-VAE/issues/11 OR https://github.com/AntixK/PyTorch-VAE/issues/35
+diff_threshold = 0.02
+diff_factor = 10
 
 class VariationalAutoencoder(nn.Module):
     def __init__(self, dims=[32, 64, 128, 256]):
@@ -234,58 +234,45 @@ def save_images(autoencoder, critic):
                 to_np(recons[4].view(-1, 3, w, w)[0]),
                 to_np(recons[5].view(-1, 3, w, w)[0]),
             ), axis=2)
+
+            _, img = prepare_rgb_image(conc_h)
         else:
             if preds[0] < 0.6:
                 continue
             
             recon_one = autoencoder.evaluate(img_tensor, torch.ones(1).to(device))
-            recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device))
+            recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device) + 0.3)
 
             recon_one = to_np(recon_one.view(-1, 3, w, w)[0])
             recon_zero = to_np(recon_zero.view(-1, 3, w, w)[0])
 
             diff = cv2.subtract(recon_zero, recon_one)
-            diff = abs(diff) * 4
+            diff = abs(diff)
+            diff[diff > diff_threshold] *= diff_factor
+            diff[diff > 1] = 1
             #diff[diff < 250] = 0
             # _, diff = cv2.threshold(diff, 255, 255, cv2.THRESH_BINARY)
 
-            conc_h = np.concatenate((
+            _, diff_img = prepare_rgb_image(diff)
+            diff_img = ImageOps.grayscale(diff_img)
+
+            conc_h = np.array(np.concatenate((
                 to_np(img_tensor.view(-1, 3, w, w)[0]),
                 recon_one,
                 recon_zero,
-                diff
-            ), axis=2)
-        
-        ### SAVE IMAGE ###
-        _, img = prepare_rgb_image(conc_h)
+            ), axis=2))
+
+            _, conc_img = prepare_rgb_image(conc_h)        
+            
+            img = Image.new('RGB', (64*4, 64))
+            img.paste(conc_img, (0, 0))
+            img.paste(diff_img, (64*3, 0))
 
         if INJECT:
             draw = ImageDraw.Draw(img)
             draw.text((w*1+2, 2), f'{preds[0].item():.1f}', (255,255,255))
         
         img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
-
-def plot_latent(autoencoder, dset, num_images=BATCH_SIZE*10):
-    num_samples = dset.shape[0]
-    indices = np.arange(num_samples)
-
-    for batch_i in range(0, num_samples, BATCH_SIZE):
-        # NOTE: this will cut off incomplete batches from end of the random indices
-        batch_indices = indices[batch_i:batch_i + BATCH_SIZE]
-        all_data = dset[batch_indices]
-        images = np.array([d[0] for d in all_data])
-        labels = Tensor(np.array([d[1] for d in all_data]))
-
-        x = Tensor(images).to(device)
-        z = autoencoder.encoder(x.to(device))
-        z = z.to('cpu').detach().numpy()
-        plt.scatter(z[:, 0], z[:, 1], c=labels)
-
-        if batch_i > num_images:
-            plt.colorbar()
-            break
-    
-    plt.show()
 
 ### Initialize mineRL dataset ###
 os.environ['MINERL_DATA_ROOT'] = MINERL_DATA_ROOT_PATH
@@ -313,8 +300,8 @@ if TRAIN: # change for training
     torch.save(vae.decoder.state_dict(), 'vae_decoder_weights.pt')
 else:
     try:
-        vae.encoder.load_state_dict(torch.load('vae_encoder_weights.pt'))
-        vae.decoder.load_state_dict(torch.load('vae_decoder_weights.pt'))
+        vae.encoder.load_state_dict(torch.load('saved-networks/vae_encoder_weights.pt'))
+        vae.decoder.load_state_dict(torch.load('saved-networks/vae_decoder_weights.pt'))
     except Exception as e:
         print(e)
     
@@ -323,11 +310,3 @@ else:
     vae.decoder.eval()
 
     save_images(vae, critic)
-
-    if False:
-        try:
-            matplotlib.use('TkAgg') # stops working randomly after a while, works again after relogging into PC
-        except:
-            print(f'matplotlib is using {matplotlib.get_backend()}.')
-
-        plot_latent(vae, dset)
