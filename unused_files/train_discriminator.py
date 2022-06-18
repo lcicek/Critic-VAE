@@ -8,7 +8,7 @@ import numpy as np
 from time import time
 
 from logger import Logger
-from nets import *
+from aae_nets import *
 from parameters import *
 from utility import *
 

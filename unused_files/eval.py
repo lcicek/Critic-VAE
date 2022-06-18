@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 import numpy as np
 
-from nets import *
+from aae_nets import *
 from parameters import *
 from utility import *
 

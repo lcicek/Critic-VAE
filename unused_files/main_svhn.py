@@ -9,7 +9,7 @@ import time
 #import tensorflow as tf
 
 from utility import to_np, to_var, euclid_loss, master_params, init_weights
-from nets import Q_net, P_net, D_net
+from aae_nets import Q_net, P_net, D_net
 from logger import Logger
 from parameters import (
     NUM_CLASSES, BATCH_SIZE, TRAIN, AUTOCAST,

@@ -6,31 +6,57 @@ from PIL import Image
 import random
 import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
 import cv2
+import os
+import minerl
+from critic_net import Critic
+
+def initialize():
+    ### Initialize mineRL dataset ###
+    os.environ['MINERL_DATA_ROOT'] = MINERL_DATA_ROOT_PATH
+    data = minerl.data.make('MineRLTreechop-v0', num_workers=1)
+    all_pov_obs = load_minerl_data(data) # get all minerl observations
+    del data # without this line, error gets thrown at the end of the program
+
+    ### Load trained critic model ###
+    print('loading critic...')
+    critic = Critic()
+    critic.load_state_dict(torch.load(CRITIC_PATH, map_location='cpu'))
+    critic.eval()
+
+    ### Preprocess minerl data; Divide evenly into high/low-value images ###
+    print('preparing data...')
+    dset = prepare_data(all_pov_obs, critic, resize=False)
+    critic = critic.to(device) 
+
+    return dset, critic
 
 def to_np(x):
     return x.data.cpu().numpy()
 
-def to_var(x):
-    if torch.cuda.is_available():
-        x = x.cuda()
-    return x
+def separate_channels(img_array): # HWC
+    r = np.copy(img_array)
+    g = np.copy(img_array) 
+    b = np.copy(img_array)
+    
+    r[:, :, 1] = 0
+    r[:, :, 2] = 0
 
-def master_params(optimizer):
-    for group in optimizer.param_groups:
-        for p in group['params']:
-            yield p
+    g[:, :, 0] = 0
+    g[:, :, 2] = 0
 
-# Yielded good results but not perfect.
-def init_weights(net):
-    for m in net.modules():
-        if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
-            torch.nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
-            torch.nn.init.normal_(m.bias, 0, 1.414)
+    b[:, :, 0] = 0
+    b[:, :, 1] = 0
+
+    r_img = Image.fromarray(r)
+    g_img = Image.fromarray(g)
+    b_img = Image.fromarray(b)
+
+    return r_img, g_img, b_img
+    
 
 def prepare_rgb_image(img_array): # numpy_array
     img_array = np.transpose(img_array, (1, 2, 0)) # CHW to HWC
     img_array = (img_array * 255).astype(np.uint8)
-    #Image.fromarray(img, mode='RGB').save(s, format="png")
     image = Image.fromarray(img_array, mode='RGB')
 
     return img_array, image
@@ -72,7 +98,6 @@ def get_critic_labels(preds):
     return torch.as_tensor(labels)
 
 def prepare_data(data, critic, resize=True, shuffle=True):
-    print('preparing data...')
     final_dset = []
     high_value_images = []
 

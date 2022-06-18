@@ -1,7 +1,7 @@
 import torch
 import os
 import minerl
-from nets import Critic
+from aae_nets import Critic
 from parameters import CRITIC_PATH, MINERL_DATA_ROOT_PATH, PLOT_DATASET_PATH, DATA_SAMPLES
 from utility import load_minerl_data, prepare_data
 
