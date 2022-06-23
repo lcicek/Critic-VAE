@@ -33,27 +33,6 @@ def initialize():
 def to_np(x):
     return x.data.cpu().numpy()
 
-def separate_channels(img_array): # HWC
-    r = np.copy(img_array)
-    g = np.copy(img_array) 
-    b = np.copy(img_array)
-    
-    r[:, :, 1] = 0
-    r[:, :, 2] = 0
-
-    g[:, :, 0] = 0
-    g[:, :, 2] = 0
-
-    b[:, :, 0] = 0
-    b[:, :, 1] = 0
-
-    r_img = Image.fromarray(r)
-    g_img = Image.fromarray(g)
-    b_img = Image.fromarray(b)
-
-    return r_img, g_img, b_img
-    
-
 def prepare_rgb_image(img_array): # numpy_array
     img_array = np.transpose(img_array, (1, 2, 0)) # CHW to HWC
     img_array = (img_array * 255).astype(np.uint8)

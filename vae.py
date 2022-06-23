@@ -9,11 +9,12 @@ from PIL import Image, ImageDraw, ImageOps
 from time import time
 import argparse
 import cv2
+import os
 
-from parameters import *
+from parameters import DATA_SAMPLES
 from vae_parameters import *
 from vae_nets import *
-from utility import initialize, prepare_rgb_image, separate_channels, to_np
+from utility import initialize, prepare_rgb_image, to_np
 from logger import Logger
 
 parser = argparse.ArgumentParser()
@@ -25,7 +26,7 @@ TRAIN = args.t
 INJECT = args.i
 
 def train(autoencoder, dset):
-    opt = torch.optim.Adam(autoencoder.parameters(), lr=0.0001) 
+    opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
 
     # Start training
@@ -35,9 +36,9 @@ def train(autoencoder, dset):
 
         print(f'epoch: {ep}')
 
-        for batch_i in range(0, num_samples, BATCH_SIZE):
+        for batch_i in range(0, num_samples, batch_size):
             # NOTE: this will cut off incomplete batches from end of the random indices
-            batch_indices = epoch_indices[batch_i:batch_i + BATCH_SIZE]
+            batch_indices = epoch_indices[batch_i:batch_i + batch_size]
 
             all_data = dset[batch_indices]
             
@@ -94,8 +95,8 @@ def image_results(autoencoder, critic):
 
             _, img = prepare_rgb_image(conc_h)
         else:
-            #if preds[0] < 0.6: # see if we can amplify trees in high value images
-            #    continue # skip low value images
+            if preds[0] < 0.6: # see if we can amplify trees in high value images
+                continue # skip low value images
             
             recon_one = autoencoder.evaluate(img_tensor, torch.ones(1).to(device))
             recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device))
@@ -106,11 +107,8 @@ def image_results(autoencoder, critic):
             diff = cv2.subtract(recon_zero, recon_one)
             diff = abs(diff) * diff_factor
 
-            diff_img_array, _ = prepare_rgb_image(diff)
-            r, g, b = separate_channels(diff_img_array)
-            r = ImageOps.grayscale(r)
-            g = ImageOps.grayscale(g)
-            b = ImageOps.grayscale(b)
+            _, diff_img = prepare_rgb_image(diff)
+            diff_img = ImageOps.grayscale(diff_img)
 
             conc_h = np.array(np.concatenate((
                 to_np(img_tensor.view(-1, ch, w, w)[0]),
@@ -120,11 +118,9 @@ def image_results(autoencoder, critic):
 
             _, conc_img = prepare_rgb_image(conc_h)        
             
-            img = Image.new('RGB', (w*6, w))
+            img = Image.new('RGB', (w*4, w))
             img.paste(conc_img, (0, 0))
-            img.paste(r, (w*3, 0))
-            img.paste(g, (w*4, 0))
-            img.paste(b, (w*5, 0))
+            img.paste(diff_img, (w*3, 0))
 
         if INJECT:
             draw = ImageDraw.Draw(img)
