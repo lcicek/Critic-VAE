@@ -15,18 +15,22 @@ import pickle
 from parameters import DATA_SAMPLES, CRITIC_PATH
 from vae_parameters import *
 from vae_nets import *
-from utility import initialize, load_minerl_data_by_trajectory, prepare_rgb_image, to_np
+from utility import initialize, load_minerl_data_by_trajectory, prepare_rgb_image, to_np, prepare_data
 from logger import Logger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', action='store_true') # train
 parser.add_argument('-i', action='store_true') # show recons of samples
 parser.add_argument('-dataset', action='store_true') # save recons as dataset
+parser.add_argument('-second', action='store_true') # train second VAE
+parser.add_argument('-evalsecond', action='store_true')
 args = parser.parse_args()
 
 TRAIN = args.t
 INJECT = args.i
 DATASET = args.dataset
+SECOND = args.second
+EVAL_SECOND = args.evalsecond
 
 def train(autoencoder, dset):
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
@@ -98,8 +102,8 @@ def image_results(autoencoder, critic):
 
             _, img = prepare_rgb_image(conc_h)
         else:
-            if preds[0] < 0.6: # see if we can amplify trees in high value images
-                continue # skip low value images
+            #if preds[0] < 0.6: # see if we can amplify trees in high value images
+            #    continue # skip low value images
             
             recon_one = autoencoder.evaluate(img_tensor, torch.ones(1).to(device))
             recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device))
@@ -108,7 +112,8 @@ def image_results(autoencoder, critic):
             recon_zero = to_np(recon_zero.view(-1, ch, w, w)[0])
 
             diff = cv2.subtract(recon_zero, recon_one)
-            diff = abs(diff) * diff_factor
+            diff = abs(diff)# * diff_factor
+
 
             _, diff_img = prepare_rgb_image(diff)
             diff_img = ImageOps.grayscale(diff_img)
@@ -128,7 +133,10 @@ def image_results(autoencoder, critic):
         if INJECT:
             draw = ImageDraw.Draw(img)
             draw.text((w+2, 2), f'{preds[0].item():.1f}', (255,255,255))
-        
+        else:
+            draw = ImageDraw.Draw(img)
+            draw.text((2, 2), f'{preds[0].item():.1f}', (255,255,255))
+
         img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
 
 def create_recon_dataset(vae, critic):
@@ -159,6 +167,18 @@ def create_recon_dataset(vae, critic):
 
     return traj_dict
 
+def preprocess(recon_dset):
+    recon_dset = list(recon_dset.values())
+    ret = []
+
+    for traj in recon_dset:
+        ret.append(np.array(traj))
+        #ret.append(np.array(traj).astype(np.float32).transpose(0, 3, 1, 2) / 255)
+    
+    ret = np.concatenate(ret, axis=0)
+
+    return ret
+
 if DATASET:
     vae = VariationalAutoencoder().to(device) # GPU
 
@@ -182,6 +202,48 @@ if DATASET:
 
     with open(SAVE_DATASET_PATH, 'wb') as file:
         pickle.dump(dataset, file)
+elif SECOND:
+    from critic_net import Critic
+    critic = Critic()
+    critic.load_state_dict(torch.load(SECOND_CRITIC_PATH))
+    critic.eval()
+
+    print('preparing dataset...')
+    with open('/homes/lcicek/Desktop/AAE/recon-dataset.pickle', 'rb') as file:
+        recon_dset = pickle.load(file)
+
+    recon_dset = preprocess(recon_dset)
+    recon_dset = prepare_data(recon_dset, critic, resize=False)
+    critic.to(device)
+
+    print('starting training...')
+    logger = Logger('./logs/vae' + str(time())[-5::])
+    vae = VariationalAutoencoder().to(device) # GPU
+    vae = train(vae, recon_dset)
+
+    torch.save(vae.encoder.state_dict(), SECOND_ENCODER_PATH)
+    torch.save(vae.decoder.state_dict(), SECOND_DECODER_PATH)
+elif True:
+    from critic_net import Critic
+    critic = Critic()
+    critic.load_state_dict(torch.load(SECOND_CRITIC_PATH))
+    critic.eval()
+    critic.to(device)
+
+    vae = VariationalAutoencoder().to(device) # GPU
+
+    try:
+        vae.encoder.load_state_dict(torch.load(SECOND_ENCODER_PATH))
+        vae.decoder.load_state_dict(torch.load(SECOND_DECODER_PATH))
+    except Exception as e:
+        print(e)
+    
+    vae.eval()
+    vae.encoder.eval()
+    vae.decoder.eval()
+
+    image_results(vae, critic)
+
 else:
     dset, critic = initialize()
     vae = VariationalAutoencoder().to(device) # GPU

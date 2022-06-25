@@ -20,5 +20,9 @@ log_n = batch_size * 30  # data is logged every "log_n"-step
 ENCODER_PATH = 'saved-networks/vae_encoder_weights-regular.pt'
 DECODER_PATH = 'saved-networks/vae_decoder_weights-regular.pt'
 EVAL_IMAGES_PATH = '/homes/lcicek/Desktop/AAE/source-images'
-SAVE_PATH = '/homes/lcicek/Desktop/AAE/images'
+SAVE_PATH = '/homes/lcicek/Desktop/AAE/second-vae-images'
 SAVE_DATASET_PATH = '/homes/lcicek/Desktop/AAE/recon-dataset.pickle'
+
+SECOND_ENCODER_PATH = 'saved-networks/second_vae_encoder_weights.pt'
+SECOND_DECODER_PATH = 'saved-networks/second_vae_decoder_weights.pt'
+SECOND_CRITIC_PATH = 'recon-critic-net/saves/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=100000-shift=12-chfak=1-dropout=0.3.pt'
