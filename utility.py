@@ -140,6 +140,27 @@ def prepare_data(data, critic, resize=True, shuffle=True):
 
     return final_dset
 
+def load_minerl_data_by_trajectory():
+    os.environ['MINERL_DATA_ROOT'] = MINERL_DATA_ROOT_PATH
+    data = minerl.data.make('MineRLTreechop-v0', num_workers=1)
+
+    trajectory_names = data.get_trajectory_names()
+    ret = {}
+
+    for trajectory_name in trajectory_names:
+        trajectory = data.load_data(trajectory_name, skip_interval=0, include_metadata=False)
+        
+        all_povs = []
+
+        for dataset_observation, _, _, _, _ in trajectory:
+            all_povs.append(dataset_observation["pov"])
+        
+        ret[trajectory_name] = all_povs
+    
+    del data # without this line, error gets thrown at the end of the program
+
+    return ret
+
 # source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
 def load_minerl_data(data, shuffle=True):
     print("loading minerl-data...")
