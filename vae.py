@@ -11,6 +11,7 @@ import argparse
 import cv2
 import os
 import pickle
+import statistics
 
 from parameters import DATA_SAMPLES, CRITIC_PATH
 from vae_parameters import *
@@ -75,8 +76,70 @@ def train(autoencoder, dset):
 
     return autoencoder
 
+def get_injected_img(autoencoder, img_tensor, pred):
+    orig_recon = autoencoder.evaluate(img_tensor, pred)
+    recons = autoencoder.inject(img_tensor)
+
+    conc_h = np.concatenate((
+        to_np(img_tensor.view(-1, ch, w, w)[0]),
+        to_np(orig_recon.view(-1, ch, w, w)[0]),
+    ), axis=2)
+
+    conc_recons = np.concatenate([to_np(recons[i].view(-1, ch, w, w)[0]) for i in range(inject_n)], axis=2)
+    conc_h = np.concatenate((conc_h, conc_recons), axis=2)
+
+    _, img = prepare_rgb_image(conc_h)
+
+    return img
+
+def get_diff_image(autoencoder, img_tensor, pred):
+    #if pred < 0.6: # see if we can amplify trees in high value images
+    #    continue # skip low value images
+    
+    recon_one = autoencoder.evaluate(img_tensor, torch.ones(1).to(device))
+    recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device))
+
+    recon_one = to_np(recon_one.view(-1, ch, w, w)[0])
+    recon_zero = to_np(recon_zero.view(-1, ch, w, w)[0])
+
+    diff = cv2.subtract(recon_zero, recon_one)
+    diff = abs(diff)
+    diff = np.transpose(diff, (1, 2, 0))
+    diff = np.dot(diff[...,:3], [0.299, 0.587, 0.114]) # to greyscale
+    diff = (diff * 255).astype(np.uint8)
+    max_value = np.amax(diff)
+
+    return recon_one, recon_zero, diff, max_value
+
+def prepare_diff_image(diff_img, diff_factor):
+    diff_img *= diff_factor
+    diff_img[diff_img > 255] = 255
+    diff_img = Image.fromarray(diff_img)
+
+    return diff_img
+
+def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred):
+    conc_h = np.array(np.concatenate((
+        to_np(img_tensor.view(-1, ch, w, w)[0]),
+        recon_one,
+        recon_zero,
+    ), axis=2))
+
+    _, conc_img = prepare_rgb_image(conc_h)        
+    
+    img = Image.new('RGB', (w*4, w))
+    img.paste(conc_img, (0, 0))
+    img.paste(diff_img, (w*3, 0))
+
+    draw = ImageDraw.Draw(img)
+    draw.text((2, 2), f'{pred.item():.1f}', (255,255,255))
+
+    return img
+
 def image_results(autoencoder, critic):
     folder = os.listdir(EVAL_IMAGES_PATH)
+    imgs = []
+    diff_max_values = []
     for i, img_file in enumerate(folder):
         ### LOAD IMAGES AND PREPROCESS ###
         orig_img = Image.open(f'{EVAL_IMAGES_PATH}/{img_file}')
@@ -89,55 +152,22 @@ def image_results(autoencoder, critic):
         preds, _ = critic.evaluate(img_tensor)
 
         if INJECT:
-            orig_recon = autoencoder.evaluate(img_tensor, preds[0])
-            recons = autoencoder.inject(img_tensor)
-
-            conc_h = np.concatenate((
-                to_np(img_tensor.view(-1, ch, w, w)[0]),
-                to_np(orig_recon.view(-1, ch, w, w)[0]),
-            ), axis=2)
-
-            conc_recons = np.concatenate([to_np(recons[i].view(-1, ch, w, w)[0]) for i in range(inject_n)], axis=2)
-            conc_h = np.concatenate((conc_h, conc_recons), axis=2)
-
-            _, img = prepare_rgb_image(conc_h)
+            img = get_injected_img(autoencoder, img_tensor, preds[0])
+            img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
         else:
-            #if preds[0] < 0.6: # see if we can amplify trees in high value images
-            #    continue # skip low value images
-            
-            recon_one = autoencoder.evaluate(img_tensor, torch.ones(1).to(device))
-            recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device))
+            ro, rz, diff, max_value = get_diff_image(autoencoder, img_tensor, preds[0])
+            imgs.append([ro, rz, diff])
+            diff_max_values.append(max_value)
+    
+    if not INJECT:
+        mean_max = statistics.mean(diff_max_values)
+        diff_factor = 255 // mean_max
 
-            recon_one = to_np(recon_one.view(-1, ch, w, w)[0])
-            recon_zero = to_np(recon_zero.view(-1, ch, w, w)[0])
+        for i, img in enumerate(imgs):
+            diff_img = prepare_diff_image(img[2], diff_factor)
+            save_img = save_diff_image(img_tensor, img[0], img[1], diff_img, preds[0])
 
-            diff = cv2.subtract(recon_zero, recon_one)
-            diff = abs(diff)# * diff_factor
-
-
-            _, diff_img = prepare_rgb_image(diff)
-            diff_img = ImageOps.grayscale(diff_img)
-
-            conc_h = np.array(np.concatenate((
-                to_np(img_tensor.view(-1, ch, w, w)[0]),
-                recon_one,
-                recon_zero,
-            ), axis=2))
-
-            _, conc_img = prepare_rgb_image(conc_h)        
-            
-            img = Image.new('RGB', (w*4, w))
-            img.paste(conc_img, (0, 0))
-            img.paste(diff_img, (w*3, 0))
-
-        if INJECT:
-            draw = ImageDraw.Draw(img)
-            draw.text((w+2, 2), f'{preds[0].item():.1f}', (255,255,255))
-        else:
-            draw = ImageDraw.Draw(img)
-            draw.text((2, 2), f'{preds[0].item():.1f}', (255,255,255))
-
-        img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
+            save_img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
 
 def create_recon_dataset(vae, critic):
     traj_dict = load_minerl_data_by_trajectory()
