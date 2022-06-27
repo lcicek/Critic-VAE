@@ -24,6 +24,7 @@ parser.add_argument('-i', action='store_true') # show recons of samples
 parser.add_argument('-dataset', action='store_true') # save recons as dataset
 parser.add_argument('-second', action='store_true') # train second VAE
 parser.add_argument('-evalsecond', action='store_true')
+parser.add_argument('-video', action='store_true')
 args = parser.parse_args()
 
 TRAIN = args.t
@@ -31,6 +32,7 @@ INJECT = args.i
 CREATE_DATASET = args.dataset
 TRAIN_SECOND_VAE = args.second
 EVAL_SECOND_VAE = args.evalsecond
+VIDEO = args.video
 
 def train(autoencoder, dset):
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
@@ -101,7 +103,32 @@ def image_evaluate(autoencoder, critic):
 
 vae = VariationalAutoencoder().to(device) # GPU
 
-if CREATE_DATASET:
+if True:
+    trajectory_names = [
+        "v3_content_squash_angel-3_16074-17640",
+        "v3_smooth_kale_loch_ness_monster-1_4439-6272",
+        "v3_cute_breadfruit_spirit-6_17090-19102",
+        "v3_key_nectarine_spirit-2_7081-9747",
+    ]
+
+    # get images from regular vae
+    load_vae_network(vae)
+    critic = load_critic(CRITIC_PATH)
+
+    frames = collect_frames(trajectory_names)
+    vae_frames = evaluate_frames(frames, vae, critic)
+
+    # get images from second vae
+    vae = VariationalAutoencoder().to(device) # new
+    load_vae_network(vae, second_vae=True)
+    critic = load_critic(SECOND_CRITIC_PATH)
+
+    second_vae_frames = evaluate_frames(frames, vae, critic)
+
+    concatenated = concat_frames(vae_frames, second_vae_frames)
+    create_video(concatenated)
+
+elif CREATE_DATASET:
     load_vae_network(vae)
     critic = load_critic(CRITIC_PATH)
     dataset = create_recon_dataset(vae, critic)

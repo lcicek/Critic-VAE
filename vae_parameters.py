@@ -28,3 +28,5 @@ SECOND_DECODER_PATH = 'saved-networks/second_vae_decoder_weights.pt'
 
 CRITIC_PATH = '/homes/lcicek/Desktop/AAE/saved-networks/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=99999-shift=12-chfak=1-dropout=0.3.pt'
 SECOND_CRITIC_PATH = 'recon-critic-net/saves/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=100000-shift=12-chfak=1-dropout=0.3.pt'
+
+MINERL_DATA_ROOT_PATH = '/homes/lcicek/anaconda3/envs/aae/lib/python3.9/site-packages/minerl'
