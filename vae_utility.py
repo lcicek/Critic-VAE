@@ -13,8 +13,9 @@ from vae_nets import *
 from utility import load_minerl_data_by_trajectory, prepare_rgb_image, to_np
 
 def create_video(trajectories):
+    print('creating videos...')
     for i, frames in enumerate(trajectories):
-        frames[0].save(f"videos/video-{i+1}.gif", duration=100, save_all=True, loop=0, append_images=frames[1:])
+        frames[0].save(f"videos/video-{i+1}.gif", disposal=3, duration=100, save_all=True, loop=0, append_images=frames[1:])
 
 def concat_frames(trajs1, trajs2):
     print('concatting frames...')
@@ -41,11 +42,11 @@ def concat_frames(trajs1, trajs2):
 
 def evaluate_frames(trajectories, vae, critic):
     print('processing frames...')
-    imgs = []
-    diff_max_values = []
     ret = []
     for trajectory in trajectories:
+        imgs = []
         results = []
+        diff_max_values = []
 
         for frame in trajectory:
             preds, _ = critic.evaluate(frame)
