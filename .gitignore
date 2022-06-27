@@ -10,3 +10,4 @@ plot_dataset.pt
 images_mssim_loss_kld=0005
 recon-dataset.pickle
 second-vae-images
+videos/*
