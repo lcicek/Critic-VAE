@@ -77,6 +77,8 @@ def get_critic_labels(preds):
     return torch.as_tensor(labels)
 
 def prepare_data(data, critic, resize=True, shuffle=True):
+    critic.to(torch.device('cpu')) # program crashes when using too much memory, so use cpu instead
+
     final_dset = []
     high_value_images = []
 
@@ -137,6 +139,8 @@ def prepare_data(data, critic, resize=True, shuffle=True):
         np.random.seed(1) # Shuffle high- and low-value-images but keep randomization the same for plotting
     
     np.random.shuffle(final_dset)
+
+    critic.to(device) # back to cuda if available
 
     return final_dset
 
