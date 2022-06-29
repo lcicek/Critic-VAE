@@ -1,18 +1,22 @@
+import statistics
 import torch
 from torch import Tensor
 import torch.utils
 import torch.distributions
 import numpy as np
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageFont
 import cv2
-import statistics
 
 from parameters import DATA_SAMPLES
 from vae_parameters import *
 from vae_nets import *
 from utility import load_minerl_data_by_trajectory, prepare_rgb_image, to_np
 
-def get_iou(self, A, B):
+THRESHOLD = 30
+font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
+titles = ["orig img\n+crit val", "crit=1\ninjected", "crit=0\ninjected", "difference\nmask", f"thresholded\nmask\nthr={THRESHOLD}", "ground\ntruth"]
+
+def get_iou(A, B):
     intersection = np.sum(A & B)
     union = np.sum(A | B)
     iou = intersection / union
@@ -28,19 +32,20 @@ def load_textured_minerl():
     text_dset = text_dset[np.newaxis, ...] # make it a list of trajectories with size=1 so it works with evauate_frames()
     
     gt_dset = gt_dset[100:5000:2].transpose(0, 3, 1, 2) # gt = ground turth
-    gt_dset = gt_dset.astype(np.uint8) * 255
     gt_dset = gt_dset.squeeze()
     #gt_dset = gt_dset[np.newaxis, ...]
     # Y.transpose(0,3,1,2)
 
     return text_dset, gt_dset
 
-def create_video(trajectories):
+def create_video(trajectories, masks=True):
     print('creating videos...')
     for i, frames in enumerate(trajectories):
-        frames[0].save(f"videos/video-{i+1}.gif", format='GIF', disposal=3, duration=100, save_all=True, loop=0, append_images=frames[1:])
-
-def concat_frames(trajs1, trajs2, masks=False):
+        if masks:
+            frames[0].save(f"videos/video-threshold={THRESHOLD}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=frames[1:])
+        else:
+            frames[0].save(f"videos/video-{i+1}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=frames[1:])
+def concat_frames(trajs1, trajs2, masks=False, ious=None):
     print('concatting frames...')
     all_conc = []
 
@@ -54,9 +59,17 @@ def concat_frames(trajs1, trajs2, masks=False):
             f2 = frames2[j]
 
             factor = 6 if masks else 4
-            conc_f = Image.new('RGB', (w*factor, w*2))
-            conc_f.paste(f1, (0, 0))
-            conc_f.paste(f2, (0, w))
+            conc_f = Image.new('RGB', (w*factor, w*3))
+
+            if masks:
+                draw = ImageDraw.Draw(conc_f)
+                for i, title in enumerate(titles):
+                    if (i == 5):
+                        title += f"\niou1={ious[0]}\niou2={ious[1]}"
+                    draw.text((w*i+2, 0), title, (255,255,255), font=font)
+
+            conc_f.paste(f1, (0, w))
+            conc_f.paste(f2, (0, w*2))
 
             conc_frames.append(conc_f)
 
@@ -71,6 +84,7 @@ def evaluate_frames(trajectories, vae, critic, textured=False, gt=None):
         imgs = []
         results = []
         diff_max_values = []
+        ious = []
 
         for i, frame in enumerate(trajectory):
             if textured:
@@ -93,18 +107,22 @@ def evaluate_frames(trajectories, vae, critic, textured=False, gt=None):
             diff_img = Image.fromarray(diff)
 
             if textured:
-                iou = get_iou(diff > 0.05, diff)
-                thresh_img = Image.fromarray((diff > 0.05).astype(np.uint8) * 255)
-                gt_img = Image.fromarray(img[5])
+                thresholded = diff > THRESHOLD
+                gt = img[5]
+                iou = get_iou(thresholded, gt)
+                ious.append(iou)
+                thresh_img = Image.fromarray(thresholded)
+                gt_img = Image.fromarray(gt)
                 result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4], gt_img, thresh_img)
             else:
                 result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
             
             results.append(result_img)
 
+        final_iou = np.nanmean(ious)
         ret.append(results)
 
-    return ret
+    return ret, final_iou
 
 def collect_frames(trajectory_names): # returns list of (64, 64, 3) images for each trajectory
     print('collecting frames...')
@@ -149,11 +167,14 @@ def get_injected_img(autoencoder, img_tensor, pred):
     return img
 
 def get_diff_image(autoencoder, img_tensor, pred):
-    #if pred < 0.6: # see if we can amplify trees in high value images
-    #    continue # skip low value images
-    
-    recon_one = autoencoder.evaluate(img_tensor, torch.ones(1).to(device))
-    recon_zero = autoencoder.evaluate(img_tensor, torch.zeros(1).to(device))
+    low_tensor = low_tensor = torch.zeros(1).to(device)
+    if pred > 0.6:
+        high_tensor = torch.ones(1).to(device)
+    else:
+        high_tensor = torch.zeros(1).to(device) + pred
+
+    recon_one = autoencoder.evaluate(img_tensor, high_tensor)
+    recon_zero = autoencoder.evaluate(img_tensor, low_tensor)
 
     recon_one = to_np(recon_one.view(-1, ch, w, w)[0])
     recon_zero = to_np(recon_zero.view(-1, ch, w, w)[0])
@@ -192,7 +213,7 @@ def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred, gt_img=No
         img.paste(gt_img, (w*5, 0))
 
     draw = ImageDraw.Draw(img)
-    draw.text((2, 2), f'{pred.item():.1f}', (255,255,255))
+    draw.text((2, 2), f'{pred.item():.1f}', (255,255,255), font=font)
 
     return img
 

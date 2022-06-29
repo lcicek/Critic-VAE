@@ -36,7 +36,6 @@ EVAL_SECOND_VAE = args.evalsecond
 VIDEO = args.video
 MASKS = args.masks
 
-
 def train(autoencoder, dset, logger):
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
@@ -98,7 +97,8 @@ def image_evaluate(autoencoder, critic):
         diff_factor = 255 // mean_max
 
         for i, img in enumerate(imgs):
-            diff_img = prepare_diff_image(img[2], diff_factor)
+            diff_img = prepare_diff(img[2], diff_factor)
+            diff_img = Image.fromarray(diff_img)
             save_img = save_diff_image(img_tensor, img[0], img[1], diff_img, preds[0])
 
             save_img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
@@ -123,16 +123,16 @@ if True:
         ]
         frames = collect_frames(trajectory_names)
 
-    vae_frames = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
+    vae_frames, iou1 = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
 
     # get images from second vae
     vae = VariationalAutoencoder().to(device) # new
     load_vae_network(vae, second_vae=True)
     critic = load_critic(SECOND_CRITIC_PATH)
 
-    second_vae_frames = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
+    second_vae_frames, iou2 = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
 
-    concatenated = concat_frames(vae_frames, second_vae_frames, masks=True)
+    concatenated = concat_frames(vae_frames, second_vae_frames, masks=True, ious=(iou1, iou2))
     create_video(concatenated)
 
 elif CREATE_DATASET:
