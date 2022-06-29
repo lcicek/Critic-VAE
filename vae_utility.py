@@ -3,7 +3,7 @@ from torch import Tensor
 import torch.utils
 import torch.distributions
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 import cv2
 import statistics
 
@@ -12,12 +12,35 @@ from vae_parameters import *
 from vae_nets import *
 from utility import load_minerl_data_by_trajectory, prepare_rgb_image, to_np
 
+def get_iou(self, A, B):
+    intersection = np.sum(A & B)
+    union = np.sum(A | B)
+    iou = intersection / union
+    return round(iou, 3)
+
+def load_textured_minerl():
+    evaldatapath = "critic-guided/red-trees/"
+    text_dset = np.load(evaldatapath + "X.npy") # / 255.0
+
+    gt_dset = np.expand_dims(np.all(np.load(evaldatapath + "Y.npy"), axis=-1), axis=-1)
+
+    text_dset = text_dset[100:5000:2]
+    text_dset = text_dset[np.newaxis, ...] # make it a list of trajectories with size=1 so it works with evauate_frames()
+    
+    gt_dset = gt_dset[100:5000:2].transpose(0, 3, 1, 2) # gt = ground turth
+    gt_dset = gt_dset.astype(np.uint8) * 255
+    gt_dset = gt_dset.squeeze()
+    #gt_dset = gt_dset[np.newaxis, ...]
+    # Y.transpose(0,3,1,2)
+
+    return text_dset, gt_dset
+
 def create_video(trajectories):
     print('creating videos...')
     for i, frames in enumerate(trajectories):
-        frames[0].save(f"videos/video-{i+1}.gif", disposal=3, duration=100, save_all=True, loop=0, append_images=frames[1:])
+        frames[0].save(f"videos/video-{i+1}.gif", format='GIF', disposal=3, duration=100, save_all=True, loop=0, append_images=frames[1:])
 
-def concat_frames(trajs1, trajs2):
+def concat_frames(trajs1, trajs2, masks=False):
     print('concatting frames...')
     all_conc = []
 
@@ -30,7 +53,8 @@ def concat_frames(trajs1, trajs2):
             f1 = frames1[j] # f = frame
             f2 = frames2[j]
 
-            conc_f = Image.new('RGB', (w*4, w*2))
+            factor = 6 if masks else 4
+            conc_f = Image.new('RGB', (w*factor, w*2))
             conc_f.paste(f1, (0, 0))
             conc_f.paste(f2, (0, w))
 
@@ -40,7 +64,7 @@ def concat_frames(trajs1, trajs2):
 
     return all_conc
 
-def evaluate_frames(trajectories, vae, critic):
+def evaluate_frames(trajectories, vae, critic, textured=False, gt=None):
     print('processing frames...')
     ret = []
     for trajectory in trajectories:
@@ -48,26 +72,41 @@ def evaluate_frames(trajectories, vae, critic):
         results = []
         diff_max_values = []
 
-        for frame in trajectory:
+        for i, frame in enumerate(trajectory):
+            if textured:
+                frame = preprocess_observation(frame)
+
             preds, _ = critic.evaluate(frame)
-            
             ro, rz, diff, max_value = get_diff_image(vae, frame, preds[0])
-            imgs.append([frame, ro, rz, diff, preds[0]])
             diff_max_values.append(max_value)
+
+            if textured:
+                imgs.append([frame, ro, rz, diff, preds[0], gt[i]])
+            else:
+                imgs.append([frame, ro, rz, diff, preds[0]])
         
         mean_max = statistics.mean(diff_max_values)
         diff_factor = 255 // mean_max
 
         for img in imgs:
-            diff_img = prepare_diff_image(img[3], diff_factor)
-            result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
+            diff = prepare_diff(img[3], diff_factor)
+            diff_img = Image.fromarray(diff)
+
+            if textured:
+                iou = get_iou(diff > 0.05, diff)
+                thresh_img = Image.fromarray((diff > 0.05).astype(np.uint8) * 255)
+                gt_img = Image.fromarray(img[5])
+                result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4], gt_img, thresh_img)
+            else:
+                result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
+            
             results.append(result_img)
 
         ret.append(results)
 
     return ret
 
-def collect_frames(trajectory_names):
+def collect_frames(trajectory_names): # returns list of (64, 64, 3) images for each trajectory
     print('collecting frames...')
     import os
     import minerl
@@ -122,20 +161,19 @@ def get_diff_image(autoencoder, img_tensor, pred):
     diff = cv2.subtract(recon_zero, recon_one)
     diff = abs(diff)
     diff = np.transpose(diff, (1, 2, 0))
-    diff = np.dot(diff[...,:3], [0.299, 0.587, 0.114]) # to greyscale
+    diff = np.dot(diff[...,:3], [0.2989, 0.5870, 0.1140]) # to greyscale
     diff = (diff * 255).astype(np.uint8)
     max_value = np.amax(diff)
 
     return recon_one, recon_zero, diff, max_value
 
-def prepare_diff_image(diff_img, diff_factor):
+def prepare_diff(diff_img, diff_factor):
     diff_img *= diff_factor
     diff_img[diff_img > 255] = 255
-    diff_img = Image.fromarray(diff_img)
 
     return diff_img
 
-def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred):
+def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred, gt_img=None, thresh_img=None):
     conc_h = np.array(np.concatenate((
         to_np(img_tensor.view(-1, ch, w, w)[0]),
         recon_one,
@@ -144,9 +182,14 @@ def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred):
 
     _, conc_img = prepare_rgb_image(conc_h)        
     
-    img = Image.new('RGB', (w*4, w))
+    factor = 4 if gt_img is None else 6
+
+    img = Image.new('RGB', (w*factor, w))
     img.paste(conc_img, (0, 0))
     img.paste(diff_img, (w*3, 0))
+    if factor == 6:
+        img.paste(thresh_img, (w*4, 0))
+        img.paste(gt_img, (w*5, 0))
 
     draw = ImageDraw.Draw(img)
     draw.text((2, 2), f'{pred.item():.1f}', (255,255,255))

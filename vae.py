@@ -25,6 +25,7 @@ parser.add_argument('-dataset', action='store_true') # save recons as dataset
 parser.add_argument('-second', action='store_true') # train second VAE
 parser.add_argument('-evalsecond', action='store_true')
 parser.add_argument('-video', action='store_true')
+parser.add_argument('-masks', action='store_true')
 args = parser.parse_args()
 
 TRAIN = args.t
@@ -33,8 +34,10 @@ CREATE_DATASET = args.dataset
 TRAIN_SECOND_VAE = args.second
 EVAL_SECOND_VAE = args.evalsecond
 VIDEO = args.video
+MASKS = args.masks
 
-def train(autoencoder, dset):
+
+def train(autoencoder, dset, logger):
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
 
@@ -103,29 +106,33 @@ def image_evaluate(autoencoder, critic):
 
 vae = VariationalAutoencoder().to(device) # GPU
 
-if True:
-    trajectory_names = [
-        "v3_content_squash_angel-3_16074-17640",
-        "v3_smooth_kale_loch_ness_monster-1_4439-6272",
-        "v3_cute_breadfruit_spirit-6_17090-19102",
-        "v3_key_nectarine_spirit-2_7081-9747",
-    ]
 
+if True:
     # get images from regular vae
     load_vae_network(vae)
     critic = load_critic(CRITIC_PATH)
 
-    frames = collect_frames(trajectory_names)
-    vae_frames = evaluate_frames(frames, vae, critic)
+    if True:
+        frames, gt_frames = load_textured_minerl() # gt = ground truth of tree trunk
+    else:
+        trajectory_names = [
+            "v3_content_squash_angel-3_16074-17640",
+            "v3_smooth_kale_loch_ness_monster-1_4439-6272",
+            "v3_cute_breadfruit_spirit-6_17090-19102",
+            "v3_key_nectarine_spirit-2_7081-9747",
+        ]
+        frames = collect_frames(trajectory_names)
+
+    vae_frames = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
 
     # get images from second vae
     vae = VariationalAutoencoder().to(device) # new
     load_vae_network(vae, second_vae=True)
     critic = load_critic(SECOND_CRITIC_PATH)
 
-    second_vae_frames = evaluate_frames(frames, vae, critic)
+    second_vae_frames = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
 
-    concatenated = concat_frames(vae_frames, second_vae_frames)
+    concatenated = concat_frames(vae_frames, second_vae_frames, masks=True)
     create_video(concatenated)
 
 elif CREATE_DATASET:
@@ -146,7 +153,7 @@ elif TRAIN_SECOND_VAE:
     recon_dset = prepare_data(recon_dset, critic, resize=False)
 
     logger = Logger('./logs/vae' + str(time())[-5::])
-    vae = train(vae, recon_dset)
+    vae = train(vae, recon_dset, logger)
 
     torch.save(vae.encoder.state_dict(), SECOND_ENCODER_PATH)
     torch.save(vae.decoder.state_dict(), SECOND_DECODER_PATH)
@@ -159,7 +166,7 @@ else: # REGULAR VAE
 
     if TRAIN:
         logger = Logger('./logs/vae' + str(time())[-5::])
-        vae = train(vae, dset)
+        vae = train(vae, dset, logger)
 
         torch.save(vae.encoder.state_dict(), ENCODER_PATH)
         torch.save(vae.decoder.state_dict(), DECODER_PATH)
