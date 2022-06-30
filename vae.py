@@ -89,7 +89,7 @@ def image_evaluate(autoencoder, critic):
             img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
         else:
             ro, rz, diff, max_value = get_diff_image(autoencoder, img_tensor, preds[0])
-            imgs.append([ro, rz, diff])
+            imgs.append([img_tensor,ro, rz, diff, preds[0]])
             diff_max_values.append(max_value)
     
     if not INJECT:
@@ -97,9 +97,9 @@ def image_evaluate(autoencoder, critic):
         diff_factor = 255 // mean_max
 
         for i, img in enumerate(imgs):
-            diff_img = prepare_diff(img[2], diff_factor)
+            diff_img = prepare_diff(img[3], diff_factor)
             diff_img = Image.fromarray(diff_img)
-            save_img = save_diff_image(img_tensor, img[0], img[1], diff_img, preds[0])
+            save_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
 
             save_img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
     
@@ -107,12 +107,12 @@ def image_evaluate(autoencoder, critic):
 vae = VariationalAutoencoder().to(device) # GPU
 
 
-if True:
+if VIDEO:
     # get images from regular vae
     load_vae_network(vae)
     critic = load_critic(CRITIC_PATH)
 
-    if True:
+    if MASKS:
         frames, gt_frames = load_textured_minerl() # gt = ground truth of tree trunk
     else:
         trajectory_names = [
@@ -123,14 +123,14 @@ if True:
         ]
         frames = collect_frames(trajectory_names)
 
-    vae_frames, iou1 = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
+    vae_frames, iou1 = eval_textured_frames(frames, vae, critic, gt_frames)
 
     # get images from second vae
     vae = VariationalAutoencoder().to(device) # new
     load_vae_network(vae, second_vae=True)
     critic = load_critic(SECOND_CRITIC_PATH)
 
-    second_vae_frames, iou2 = evaluate_frames(frames, vae, critic, textured=True, gt=gt_frames)
+    second_vae_frames, iou2 = eval_textured_frames(frames, vae, critic, gt_frames, second=True)
 
     concatenated = concat_frames(vae_frames, second_vae_frames, masks=True, ious=(iou1, iou2))
     create_video(concatenated)
@@ -143,10 +143,11 @@ elif CREATE_DATASET:
     with open(SAVE_DATASET_PATH, 'wb') as file:
         pickle.dump(dataset, file)
 elif TRAIN_SECOND_VAE:
+    print('training second vae...')
     critic = load_critic(SECOND_CRITIC_PATH)
 
     print('preparing dataset...')
-    with open('/homes/lcicek/Desktop/AAE/recon-dataset.pickle', 'rb') as file:
+    with open(SAVE_DATASET_PATH, 'rb') as file:
         recon_dset = pickle.load(file)
 
     recon_dset = prepare_recon_dataset(recon_dset)
