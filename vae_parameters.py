@@ -1,12 +1,15 @@
 import torch
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+import gc
+gc.collect()
+torch.cuda.empty_cache()
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 ### IMAGE DATA ###
 w = 64 # original image width
 ch = 3 # image channels
 
 ### TRAINING DATA ###
-epochs = 12
+epochs = 10
 batch_size = 128
 lr = 0.00005
 k = 5 # kernel size
@@ -18,6 +21,12 @@ kld_weight = 0.00025 # note: https://github.com/AntixK/PyTorch-VAE/issues/11 OR 
 
 log_n = batch_size * 30  # data is logged every "log_n"-step
 inject_n = 6
+
+### 
+MINERL_SAMPLES = 200000  # Minerl images to extract high/low value images from
+DATA_SAMPLES = 76800 # Should divide evenly with batch_size
+LHV_IMG_COUNT = DATA_SAMPLES // 2 # High/Low-Value Image count. LV-images = HV-images
+CRIT_THRESHOLD = 0.6
 
 ### PATHS ###
 ENCODER_PATH = 'saved-networks/vae_encoder_weights-mssim-00025.pt'

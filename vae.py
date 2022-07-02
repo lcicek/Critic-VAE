@@ -1,5 +1,6 @@
 # SOURCE: https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py
 import sys
+import matplotlib
 import torch; torch.manual_seed(0)
 from torch import Tensor, t
 import torch.utils
@@ -15,7 +16,6 @@ import statistics
 
 from vae_parameters import *
 from vae_nets import *
-from utility import initialize, prepare_data
 from vae_utility import *
 from logger import Logger
 
@@ -53,9 +53,7 @@ def train(autoencoder, dset, logger):
         for batch_i in range(0, num_samples, batch_size):
             # NOTE: this will cut off incomplete batches from end of the random indices
             batch_indices = epoch_indices[batch_i:batch_i + batch_size]
-            all_data = dset[batch_indices]
-            
-            images = np.array([d[0] for d in all_data])
+            images = dset[batch_indices]
             images = Tensor(images).to(device)
 
             preds, _ = critic.evaluate(images)
@@ -72,7 +70,7 @@ def train(autoencoder, dset, logger):
 
     return autoencoder
 
-def image_evaluate(autoencoder, critic):
+def image_evaluate(autoencoder, critic, hsv=False):
     print('evaluating source images...')
     folder = os.listdir(EVAL_IMAGES_PATH)
     imgs = []
@@ -80,10 +78,9 @@ def image_evaluate(autoencoder, critic):
     for i, img_file in enumerate(folder):
         ### LOAD IMAGES AND PREPROCESS ###
         orig_img = Image.open(f'{EVAL_IMAGES_PATH}/{img_file}')
-        img_array = np.array(orig_img).astype(np.float32)
+        img_array = adjust_values(orig_img, hsv=hsv)
         img_array = img_array.transpose(2, 0, 1) # HWC to CHW for critic
         img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
-        img_array /= 255 # to range 0-1
         img_tensor = Tensor(img_array).to(device)
 
         preds, _ = critic.evaluate(img_tensor)
@@ -98,10 +95,11 @@ def image_evaluate(autoencoder, critic):
     
     if not INJECT:
         mean_max = statistics.mean(diff_max_values)
-        diff_factor = 255 / mean_max if mean_max != 0 else 0
+        diff_factor = 1 / mean_max if mean_max != 0 else 0
 
         for i, img in enumerate(imgs):
             diff_img = prepare_diff(img[3], diff_factor, mean_max)
+            diff_img = (diff_img * 255).astype(np.uint8)
             diff_img = Image.fromarray(diff_img)
             save_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
 
@@ -157,10 +155,10 @@ if VIDEO or DEBUG:
 elif CREATE_DATASET:
     load_vae_network(vae)
     critic = load_critic(CRITIC_PATH)
-    dataset = create_recon_dataset(vae, critic)
+    dset = load_minerl_data(critic, recon_dset=True, vae=vae)
 
     with open(SAVE_DATASET_PATH, 'wb') as file:
-        pickle.dump(dataset, file)
+        pickle.dump(dset, file)
 elif TRAIN_SECOND_VAE:
     print('training second vae...')
     critic = load_critic(SECOND_CRITIC_PATH)
@@ -169,8 +167,7 @@ elif TRAIN_SECOND_VAE:
     with open(SAVE_DATASET_PATH, 'rb') as file:
         recon_dset = pickle.load(file)
 
-    recon_dset = prepare_recon_dataset(recon_dset)
-    recon_dset = prepare_data(recon_dset, critic, resize=False)
+    recon_dset = prepare_recon_dset(recon_dset)
 
     logger = Logger('./logs/vae' + str(time())[-5::])
     vae = train(vae, recon_dset, logger)
@@ -182,7 +179,8 @@ elif EVAL_SECOND_VAE:
     load_vae_network(vae, second_vae=True)
     image_evaluate(vae, critic)
 else: # REGULAR VAE
-    dset, critic = initialize()
+    critic = load_critic(CRITIC_PATH)
+    dset = load_minerl_data()
 
     if TRAIN:
         logger = Logger('./logs/vae' + str(time())[-5::])
@@ -192,4 +190,4 @@ else: # REGULAR VAE
         torch.save(vae.decoder.state_dict(), DECODER_PATH)
     else: # EVALUATE
         load_vae_network(vae)
-        image_evaluate(vae, critic)
+        image_evaluate(vae, critic, hsv=True)

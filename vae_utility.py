@@ -1,4 +1,7 @@
+import os
+import minerl
 import statistics
+import matplotlib
 import torch
 from torch import Tensor
 import torch.utils
@@ -8,10 +11,8 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 from collections import defaultdict
 
-from parameters import DATA_SAMPLES
 from vae_parameters import *
 from vae_nets import *
-from utility import load_minerl_data_by_trajectory, prepare_rgb_image, to_np
 
 THRESHOLD = 30
 font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
@@ -257,7 +258,7 @@ def get_injected_img(autoencoder, img_tensor, pred):
 
     return img
 
-def get_diff_image(autoencoder, img_tensor, pred):
+def get_diff_image(autoencoder, img_tensor, pred, hsv=False):
     high_tensor = torch.ones(1).to(device)
     low_tensor = torch.zeros(1).to(device)
 
@@ -270,8 +271,9 @@ def get_diff_image(autoencoder, img_tensor, pred):
     diff = cv2.subtract(recon_zero, recon_one)
     diff = abs(diff)
     diff = np.transpose(diff, (1, 2, 0))
+    diff = matplotlib.colors.hsv_to_rgb(diff)
     diff = np.dot(diff[...,:3], [0.2989, 0.5870, 0.1140]) # to greyscale
-    diff = (diff * 255).astype(np.uint8)
+    #diff = (diff * 255).astype(np.uint8)
     max_value = np.amax(diff)
 
     return recon_one, recon_zero, diff, max_value
@@ -279,7 +281,7 @@ def get_diff_image(autoencoder, img_tensor, pred):
 def prepare_diff(diff_img, diff_factor, mean_max):
     diff_img[diff_img > mean_max] = mean_max
     diff_img = diff_img * diff_factor
-    diff_img = diff_img.astype(np.uint8)
+    # diff_img = diff_img.astype(np.uint8)
 
     return diff_img
 
@@ -306,50 +308,30 @@ def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred, gt_img=No
 
     return img
 
-def preprocess_observation(obs):
+def adjust_values(obs, hsv):
     img_array = np.array(obs).astype(np.float32)
+    img_array /= 255 # to range 0-1
+    if hsv:
+        img_array = matplotlib.colors.rgb_to_hsv(img_array)
+   
+    return img_array
+
+def reverse_preprocess(obs, hsv=False):
+    recon = to_np(recon.view(-1, ch, w, w)[0])
+    if hsv:
+        recon = matplotlib.colors.hsv_to_rgb(recon)
+    recon = recon.transpose(1, 2, 0) # from CHW to HWC
+    recon = (recon * 255).astype(np.uint8)
+
+    return recon
+
+def preprocess_observation(obs, hsv=False):
+    img_array = adjust_values(obs, hsv=hsv)
     img_array = img_array.transpose(2, 0, 1) # HWC to CHW for critic
     img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
-    img_array /= 255 # to range 0-1
     img_tensor = Tensor(img_array).to(device)
 
     return img_tensor
-
-def create_recon_dataset(vae, critic):
-    traj_dict = load_minerl_data_by_trajectory()
-
-    for traj_name in traj_dict:
-        print(f'trajectory: {traj_name}')
-        recons = []
-        povs = traj_dict[traj_name]
-
-        for pov in povs:
-            img_tensor = preprocess_observation(pov)
-
-            preds, _ = critic.evaluate(img_tensor)
-            recon = vae.evaluate(img_tensor, preds[0])
-
-            # revert preprocessing to save image later on
-            recon = to_np(recon.view(-1, ch, w, w)[0])
-            recon = recon.transpose(1, 2, 0) # from CHW to HWC
-            recon *= 255
-            recon = recon.astype(np.uint8)
-            recons.append(recon)
-        
-        traj_dict[traj_name] = recons # update value
-
-    return traj_dict
-
-def prepare_recon_dataset(recon_dset):
-    recon_dset = list(recon_dset.values())
-    ret = []
-
-    for traj in recon_dset:
-        ret.append(np.array(traj))
-    
-    ret = np.concatenate(ret, axis=0)
-
-    return ret
 
 def load_vae_network(vae, second_vae=False):
     if second_vae:
@@ -389,3 +371,66 @@ def log_info(losses, logger, batch_i, ep):
 
     for tag, value in info.items():
         logger.scalar_summary(tag, value, batch_i + (DATA_SAMPLES * ep))
+
+def to_np(x):
+    return x.data.cpu().numpy()
+
+def prepare_rgb_image(img_array): # numpy_array
+    img_array = np.transpose(img_array, (1, 2, 0)) # CHW to HWC
+    img_array = matplotlib.colors.hsv_to_rgb(img_array)
+    img_array = (img_array * 255).astype(np.uint8)
+    image = Image.fromarray(img_array, mode='RGB')
+
+    return img_array, image
+
+def prepare_recon_dset(dset, hsv=False):
+    for obs in dset:
+        obs = preprocess_observation(obs, hsv=hsv)
+
+# source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
+def load_minerl_data(critic, hsv=False, recon_dset=False, vae=None):
+    print("loading minerl-data...")
+
+    ### Initialize mineRL dataset ###
+    os.environ['MINERL_DATA_ROOT'] = MINERL_DATA_ROOT_PATH
+    data = minerl.data.make('MineRLTreechop-v0', num_workers=1)
+
+    trajectory_names = data.get_trajectory_names()
+    rng = np.random.default_rng(seed=0)
+    rng.shuffle(trajectory_names)
+    
+    collect = 300
+    low_val = []
+    high_val = []
+    # Add trajectories to the data until we reach the required DATA_SAMPLES.
+    for trajectory_name in trajectory_names:
+        print(f'loading minerl images: {len(low_val)+len(high_val)}', end='\r')
+        c_high = 0
+        c_low = 0
+        trajectory = data.load_data(trajectory_name, skip_interval=0, include_metadata=False)
+        for dataset_observation, _, _, _, _ in trajectory:
+            obs = dataset_observation["pov"]
+            obs = preprocess_observation(obs, hsv=hsv)
+            pred, _ = critic.evaluate(obs)
+            pred = pred[0]
+            
+            if recon_dset:
+                obs = vae.evaluate(obs, pred)
+                obs = reverse_preprocess(obs)
+
+            if c_high >= collect and c_low >= collect:
+                break
+            if pred >= CRIT_THRESHOLD and c_high < collect:
+                high_val.append(obs)
+                collect_high += 1
+            elif pred < CRIT_THRESHOLD and c_low < collect:
+                low_val.append(obs)
+                collect_low += 1
+
+    low_val.extend(high_val) # low_val is full dset now
+    rng.shuffle(low_val)
+    low_val = np.array(low_val, dtype=object)
+    
+    del data # without this line, error gets thrown at the end of the program
+    return low_val
+    
