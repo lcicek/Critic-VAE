@@ -11,3 +11,4 @@ images_mssim_loss_kld=0005
 recon-dataset.pickle
 second-vae-images
 videos/*
+bin_info_vae*

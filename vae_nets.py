@@ -28,7 +28,8 @@ class VariationalAutoencoder(nn.Module):
         
         return recons
 
-    def inject(self, x, reward=Tensor([0, 0.2, 0.4, 0.6, 0.8, 1]).to(device)):
+    def inject(self, x, reward=Tensor([0, 0.2, 0.4, 0.6, 0.8, 1])):
+        reward = reward.to(device)
         mu, _ = self.encoder(x)
 
         recons = []
@@ -63,22 +64,22 @@ class VariationalEncoder(nn.Module):
         super(VariationalEncoder, self).__init__()
 
         self.model = nn.Sequential(
-                        nn.Conv2d(ch, dims[0], 5, 1, 2), # to 64x64x32
+                        nn.Conv2d(ch, dims[0], k, step, p), # to 64x64x32
                         nn.BatchNorm2d(dims[0]),
                         nn.MaxPool2d(2), # to 32x32x32
                         nn.ReLU(),
 
-                        nn.Conv2d(dims[0], dims[1], 5, 1, 2), # to 32x32x64
+                        nn.Conv2d(dims[0], dims[1], k, step, p), # to 32x32x64
                         nn.BatchNorm2d(dims[1]),
                         nn.MaxPool2d(2), # to 16x16x64
                         nn.ReLU(),
                         
-                        nn.Conv2d(dims[1], dims[2], 5, 1, 2), # to 16x16x128
+                        nn.Conv2d(dims[1], dims[2], k, step, p), # to 16x16x128
                         nn.BatchNorm2d(dims[2]),
                         nn.MaxPool2d(2), # to 8x8x128
                         nn.ReLU(),
                         
-                        nn.Conv2d(dims[2], dims[3], 5, 1, 2), # to 8x8x256
+                        nn.Conv2d(dims[2], dims[3], k, step, p), # to 8x8x256
                         nn.BatchNorm2d(dims[3]),
                         nn.MaxPool2d(2), # to 4x4x256
                         nn.ReLU(),
@@ -103,32 +104,40 @@ class Decoder(nn.Module):
     def __init__(self, dims):
         super(Decoder, self).__init__()
         self.model = nn.Sequential(
-                        nn.Conv2d(dims[3], dims[2], 5, 1, 2),
+                        nn.Conv2d(dims[3], dims[2], k, step, p),
                         nn.ReLU(),
                         nn.Upsample(scale_factor=2),
                         
-                        nn.Conv2d(dims[2], dims[1], 5, 1, 2),
+                        nn.Conv2d(dims[2], dims[1], k, step, p),
                         nn.ReLU(),
                         nn.Upsample(scale_factor=2),
                         
-                        nn.Conv2d(dims[1], dims[0], 5, 1, 2),
+                        nn.Conv2d(dims[1], dims[0], k, step, p),
                         nn.ReLU(),  
                         nn.Upsample(scale_factor=2),
 
-                        nn.Conv2d(dims[0], dims[0], 5, 1, 2),
+                        nn.Conv2d(dims[0], dims[0], k, step, p),
                         nn.ReLU(),
                         nn.Upsample(scale_factor=2),
                         
-                        nn.Conv2d(dims[0], ch, 5, 1, 2),
+                        nn.Conv2d(dims[0], ch, k, step, p),
                         nn.Tanh() # tanh-range is [-1, 1], sigmoid is [0, 1]
                     )
         
         self.decoder_input = nn.Linear(latent_dim+1, bottleneck)
 
+        #self.fc_layers = nn.Sequential(
+        #    nn.Linear(latent_dim, latent_dim),
+        #    nn.Tanh(),
+        #    nn.Linear(latent_dim, latent_dim),
+        #    nn.Tanh(),
+        #)
+
     def forward(self, z, reward, evalu=False, dim=1):
         if evalu:
             z = z[0] # batch_size is 1 when evaluating
             dim = 0
+        #X = self.fc_layers(z)
         X = self.decoder_input(torch.cat((z, reward), dim=dim))
         X = X.view(-1, 256, 4, 4)
         X = self.model(X)

@@ -17,10 +17,11 @@ def initialize():
     all_pov_obs = load_minerl_data(data) # get all minerl observations
     del data # without this line, error gets thrown at the end of the program
 
+    from vae_parameters import CRITIC_PATH as crit_path
     ### Load trained critic model ###
     print('loading critic...')
     critic = Critic()
-    critic.load_state_dict(torch.load(CRITIC_PATH, map_location='cpu'))
+    critic.load_state_dict(torch.load(crit_path, map_location='cpu'))
     critic.eval()
 
     ### Preprocess minerl data; Divide evenly into high/low-value images ###
@@ -124,9 +125,10 @@ def prepare_data(data, critic, resize=True, shuffle=True):
     assert len(high_value_images) >= LHV_IMG_COUNT
 
     # Randomize which images get chosen
-    #if shuffle:
-    #    np.random.shuffle(final_dset)
-    #    np.random.shuffle(high_value_images)
+    if shuffle:
+        rng = np.random.default_rng(seed=0)
+        rng.shuffle(final_dset)
+        rng.shuffle(high_value_images)
 
     final_dset = final_dset[0:LHV_IMG_COUNT]
     final_dset.extend(high_value_images[0:LHV_IMG_COUNT])

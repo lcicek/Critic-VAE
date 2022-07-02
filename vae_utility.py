@@ -13,15 +13,22 @@ from vae_parameters import *
 from vae_nets import *
 from utility import load_minerl_data_by_trajectory, prepare_rgb_image, to_np
 
-THRESHOLD = 65
+THRESHOLD = 30
 font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
 titles = ["orig img\n+crit val", "crit=1\ninjected", "crit=0\ninjected", "difference\nmask", f"thresholded\nmask\nthr={THRESHOLD}", "ground\ntruth"]
 
-def get_iou(A, B):
-    intersection = np.sum(A & B)
-    union = np.sum(A | B)
-    iou = intersection / union
-    return round(iou, 3)
+def get_iou(G, T):
+    tp = np.sum(G & T) # intersection i.e. true positive
+    fn = np.sum(G & np.logical_not(T)) # false negative
+    fp = np.sum(np.logical_not(G) & T) # false positive
+    
+    iou = tp / (tp + fn + fp) # intersection div by union
+    
+    iou = round(iou, 3)
+    fn_rate = round(fn / np.sum(G), 3)
+    fp_rate = round(fp / np.sum(np.logical_not(G)), 3)
+    
+    return iou, fn_rate, fp_rate
 
 def load_textured_minerl():
     evaldatapath = "critic-guided/red-trees/"
@@ -80,18 +87,31 @@ def concat_frames(trajs1, trajs2, masks=False, ious=None):
 
 def get_diff_factor(max_values):
     mean_max = statistics.mean(max_values)
-    diff_factor = 255 // mean_max
+    diff_factor = 255 / mean_max if mean_max != 0 else 0
 
-    return diff_factor
+    return diff_factor, mean_max
 
-def save_bin_info(bins, bin_frame_count, second):
+def save_bin_info(bins, bin_frame_count, gt_true_count, gt_mean, second):
     if second:
         num = '1'
     else:
         num = '2'
 
+    total_gt = np.sum(list(gt_true_count.values()))
+
     with open(f'bin_info_vae{num}.txt', 'w') as f:
-        f.write('frames separated by bin:\n')
+        f.write('ground truth pixels sorted by bin:\n')
+        for value_bin in gt_true_count:
+            count = gt_true_count[value_bin]
+            f.write(f'bin: {value_bin}, pixels = {count} = {round(count/total_gt, 2) * 100}%\n')
+
+        f.write('ground truth mean and std:\n')
+        for value_bin in gt_mean:
+            mean = round(np.mean(gt_mean[value_bin]), 2)
+            std = round(np.nanstd(gt_mean[value_bin]), 2)
+            f.write(f'bin: {value_bin}, mean = {mean}, std={std}\n')
+
+        f.write('\nframes separated by bin:\n')
         for value_bin in bin_frame_count:
             count = bin_frame_count[value_bin]
             f.write(f'bin: {value_bin}, frames = {count} = {round(count/1200, 2) * 100}%\n')
@@ -102,56 +122,69 @@ def save_bin_info(bins, bin_frame_count, second):
             std = round(np.nanstd(bins[value_bin]), 2)
             f.write(f'bin: {value_bin}, iou_mean={mean}, iou_std={std}\n')
 
-def eval_textured_frames(trajectory, vae, critic, gt, second=False):
+def eval_textured_frames(trajectory, vae, critic, gt, second=False, t=THRESHOLD):
     print('processing frames...')
     ret = []
     imgs = []
     results = []
     diff_max_values = []
-    ious = []
-
     for i, frame in enumerate(trajectory):
         frame = preprocess_observation(frame)
 
         preds, _ = critic.evaluate(frame)
-        bin_value = round(preds[0].item(), 1)
 
         ro, rz, diff, max_value = get_diff_image(vae, frame, preds[0])
         diff_max_values.append(max_value)
 
         imgs.append([frame, ro, rz, diff, preds[0], gt[i]])
-    
-    diff_factor = get_diff_factor(diff_max_values)
 
+    ious = []
+    fn_rates = []
+    fp_rates = []
     separated_bins = {}
     separated_bins = defaultdict(lambda: [], separated_bins)
     bin_frame_count = {}
     bin_frame_count = defaultdict(lambda: 0, bin_frame_count)
+    gt_true_count = {}
+    gt_true_count = defaultdict(lambda: 0, bin_frame_count)
+    gt_mean = {}
+    gt_mean = defaultdict(lambda: [], bin_frame_count)
+
+    diff_factor, mean_max = get_diff_factor(diff_max_values)
 
     for img in imgs:
-        diff = prepare_diff(img[3], diff_factor)
+        diff = prepare_diff(img[3], diff_factor, mean_max)
         diff_img = Image.fromarray(diff)
 
-        thresholded = diff > THRESHOLD
+        thresholded = diff > t
         gt = img[5]
-        iou = get_iou(thresholded, gt)
+
+        iou, fn_rate, fp_rate = get_iou(gt, thresholded)
         ious.append(iou)
+        fn_rates.append(fn_rate)
+        fp_rates.append(fp_rate)
+
         thresh_img = Image.fromarray(thresholded)
         gt_img = Image.fromarray(gt)
 
         value_bin = round(img[4].item(), 1)
         separated_bins[value_bin].append(iou)
         bin_frame_count[value_bin] += 1
+        gt_true_count[value_bin] += gt.sum()
+        gt_mean[value_bin].append(gt.sum())
 
         result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4], gt_img, thresh_img)
         results.append(result_img)
 
-    save_bin_info(separated_bins, bin_frame_count, second=second)
+    save_bin_info(separated_bins, bin_frame_count, gt_true_count, gt_mean, second=second)
 
     final_iou = np.nanmean(ious)
+    final_fn_rate = np.nanmean(fn_rates)
+    final_fp_rate = np.nanmean(fp_rates)
+
     ret.append(results)
 
-    return ret, final_iou
+    return ret, final_iou, final_fn_rate, final_fp_rate
 
 def evaluate_frames(trajectories, vae, critic):
     print('processing frames...')
@@ -169,10 +202,10 @@ def evaluate_frames(trajectories, vae, critic):
 
             imgs.append([frame, ro, rz, diff, preds[0]])
         
-        diff_factor = get_diff_factor(diff_max_values)
+        diff_factor, mean_max = get_diff_factor(diff_max_values)
 
         for img in imgs:
-            diff = prepare_diff(img[3], diff_factor)
+            diff = prepare_diff(img[3], diff_factor, mean_max)
             diff_img = Image.fromarray(diff)
 
             result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
@@ -225,12 +258,8 @@ def get_injected_img(autoencoder, img_tensor, pred):
     return img
 
 def get_diff_image(autoencoder, img_tensor, pred):
-    if pred > 0.5:
-        high_tensor = torch.ones(1).to(device)
-    else:
-        high_tensor = torch.zeros(1).to(device) + pred
-
-    low_tensor = low_tensor = torch.zeros(1).to(device)
+    high_tensor = torch.ones(1).to(device)
+    low_tensor = torch.zeros(1).to(device)
 
     recon_one = autoencoder.evaluate(img_tensor, high_tensor)
     recon_zero = autoencoder.evaluate(img_tensor, low_tensor)
@@ -247,9 +276,10 @@ def get_diff_image(autoencoder, img_tensor, pred):
 
     return recon_one, recon_zero, diff, max_value
 
-def prepare_diff(diff_img, diff_factor):
-    diff_img *= diff_factor
-    diff_img[diff_img > 255] = 255
+def prepare_diff(diff_img, diff_factor, mean_max):
+    diff_img[diff_img > mean_max] = mean_max
+    diff_img = diff_img * diff_factor
+    diff_img = diff_img.astype(np.uint8)
 
     return diff_img
 

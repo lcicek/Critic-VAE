@@ -1,5 +1,6 @@
 # SOURCE: https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py
-import torch #; torch.manual_seed(0)
+import sys
+import torch; torch.manual_seed(0)
 from torch import Tensor, t
 import torch.utils
 import torch.distributions
@@ -26,8 +27,10 @@ parser.add_argument('-second', action='store_true') # train second VAE
 parser.add_argument('-evalsecond', action='store_true')
 parser.add_argument('-video', action='store_true')
 parser.add_argument('-masks', action='store_true')
+parser.add_argument('-tt', action='store_true') # test threshold
 args = parser.parse_args()
 
+DEBUG = False
 TRAIN = args.t
 INJECT = args.i
 CREATE_DATASET = args.dataset
@@ -70,6 +73,7 @@ def train(autoencoder, dset, logger):
     return autoencoder
 
 def image_evaluate(autoencoder, critic):
+    print('evaluating source images...')
     folder = os.listdir(EVAL_IMAGES_PATH)
     imgs = []
     diff_max_values = []
@@ -94,10 +98,10 @@ def image_evaluate(autoencoder, critic):
     
     if not INJECT:
         mean_max = statistics.mean(diff_max_values)
-        diff_factor = 255 // mean_max
+        diff_factor = 255 / mean_max if mean_max != 0 else 0
 
         for i, img in enumerate(imgs):
-            diff_img = prepare_diff(img[3], diff_factor)
+            diff_img = prepare_diff(img[3], diff_factor, mean_max)
             diff_img = Image.fromarray(diff_img)
             save_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
 
@@ -106,13 +110,12 @@ def image_evaluate(autoencoder, critic):
 
 vae = VariationalAutoencoder().to(device) # GPU
 
-
-if VIDEO:
+if VIDEO or DEBUG:
     # get images from regular vae
     load_vae_network(vae)
     critic = load_critic(CRITIC_PATH)
 
-    if MASKS:
+    if MASKS or DEBUG:
         frames, gt_frames = load_textured_minerl() # gt = ground truth of tree trunk
     else:
         trajectory_names = [
@@ -123,14 +126,30 @@ if VIDEO:
         ]
         frames = collect_frames(trajectory_names)
 
-    vae_frames, iou1 = eval_textured_frames(frames, vae, critic, gt_frames)
+    if args.tt:
+        for t in range(0, 125, 10):
+            _, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, t=t)
+            print(f't={t}, iou={iou1}, fnr={fnr}, fpr={fpr}')
+        sys.exit()
+
+    vae_frames, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
+    print(f'fn_rate = {fnr}')
+    print(f'fp_rate = {fpr}')
 
     # get images from second vae
     vae = VariationalAutoencoder().to(device) # new
     load_vae_network(vae, second_vae=True)
     critic = load_critic(SECOND_CRITIC_PATH)
 
-    second_vae_frames, iou2 = eval_textured_frames(frames, vae, critic, gt_frames, second=True)
+    if args.tt:
+        for t in range(0, 125, 10):
+            _, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, second=True, t=t)
+            print(f't={t}, iou={iou1}, fnr={fnr}, fpr={fpr}')
+        sys.exit()
+    
+    second_vae_frames, iou2, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, second=True)
+    print(f'fn_rate = {fnr}')
+    print(f'fp_rate = {fpr}')
 
     concatenated = concat_frames(vae_frames, second_vae_frames, masks=True, ious=(iou1, iou2))
     create_video(concatenated)
