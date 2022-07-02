@@ -360,8 +360,8 @@ def load_critic(path):
 
     return critic
 
-def log_info(losses, logger, batch_i, ep):
-    print(f'step {batch_i + (DATA_SAMPLES * ep)}')
+def log_info(losses, logger, batch_i, ep, num_samples):
+    print(f'    ep{ep} batch{batch_i+1}', end='\r')
 
     info = {
         'recon_loss': losses['recon_loss'].item(),
@@ -370,7 +370,7 @@ def log_info(losses, logger, batch_i, ep):
     }
 
     for tag, value in info.items():
-        logger.scalar_summary(tag, value, batch_i + (DATA_SAMPLES * ep))
+        logger.scalar_summary(tag, value, batch_i + (num_samples * ep))
 
 def to_np(x):
     return x.data.cpu().numpy()
@@ -400,11 +400,13 @@ def load_minerl_data(critic, hsv=False, recon_dset=False, vae=None):
     rng.shuffle(trajectory_names)
     
     collect = 300
-    low_val = []
-    high_val = []
+    dset = []
     # Add trajectories to the data until we reach the required DATA_SAMPLES.
     for trajectory_name in trajectory_names:
-        print(f'loading minerl images: {len(low_val)+len(high_val)}', end='\r')
+        if len(dset) >= 50000:
+            break
+
+        print(f'total images = {len(dset)}')
         c_high = 0
         c_low = 0
         trajectory = data.load_data(trajectory_name, skip_interval=0, include_metadata=False)
@@ -421,16 +423,15 @@ def load_minerl_data(critic, hsv=False, recon_dset=False, vae=None):
             if c_high >= collect and c_low >= collect:
                 break
             if pred >= CRIT_THRESHOLD and c_high < collect:
-                high_val.append(obs)
-                collect_high += 1
+                dset.append(obs)
+                c_high += 1
             elif pred < CRIT_THRESHOLD and c_low < collect:
-                low_val.append(obs)
-                collect_low += 1
+                dset.append(obs)
+                c_low += 1
 
-    low_val.extend(high_val) # low_val is full dset now
-    rng.shuffle(low_val)
-    low_val = np.array(low_val, dtype=object)
+    rng.shuffle(dset)
+    #low_val = np.array(dset)
     
     del data # without this line, error gets thrown at the end of the program
-    return low_val
+    return dset
     

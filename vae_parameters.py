@@ -1,9 +1,6 @@
 import torch
-import gc
-gc.collect()
-torch.cuda.empty_cache()
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-
+#device = 'cpu'
 ### IMAGE DATA ###
 w = 64 # original image width
 ch = 3 # image channels

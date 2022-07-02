@@ -1,6 +1,5 @@
 # SOURCE: https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py
 import sys
-import matplotlib
 import torch; torch.manual_seed(0)
 from torch import Tensor, t
 import torch.utils
@@ -40,6 +39,7 @@ VIDEO = args.video
 MASKS = args.masks
 
 def train(autoencoder, dset, logger):
+    dset = torch.stack(dset).squeeze()
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
 
@@ -48,13 +48,10 @@ def train(autoencoder, dset, logger):
         epoch_indices = np.arange(num_samples)
         np.random.shuffle(epoch_indices)
 
-        print(f'epoch: {ep}')
-
         for batch_i in range(0, num_samples, batch_size):
             # NOTE: this will cut off incomplete batches from end of the random indices
             batch_indices = epoch_indices[batch_i:batch_i + batch_size]
             images = dset[batch_indices]
-            images = Tensor(images).to(device)
 
             preds, _ = critic.evaluate(images)
 
@@ -66,7 +63,7 @@ def train(autoencoder, dset, logger):
             opt.step()
 
             if batch_i % log_n == 0:
-                log_info(losses, logger, batch_i, ep)
+                log_info(losses, logger, batch_i, ep, num_samples)
 
     return autoencoder
 
@@ -180,9 +177,9 @@ elif EVAL_SECOND_VAE:
     image_evaluate(vae, critic)
 else: # REGULAR VAE
     critic = load_critic(CRITIC_PATH)
-    dset = load_minerl_data()
+    dset = load_minerl_data(critic)
 
-    if TRAIN:
+    if True:
         logger = Logger('./logs/vae' + str(time())[-5::])
         vae = train(vae, dset, logger)
 
