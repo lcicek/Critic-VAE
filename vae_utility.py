@@ -1,22 +1,54 @@
+from io import BytesIO
+from pydensecrf import densecrf as denseCRF
 import os
 import minerl
 import statistics
-import matplotlib
 import torch
 from torch import Tensor
 import torch.utils
 import torch.distributions
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-import cv2
 from collections import defaultdict
 
 from vae_parameters import *
 from vae_nets import *
 
-THRESHOLD = 30
+THRESHOLD = 40
 font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
 titles = ["orig img\n+crit val", "crit=1\ninjected", "crit=0\ninjected", "difference\nmask", f"thresholded\nmask\nthr={THRESHOLD}", "ground\ntruth"]
+
+def crf(orig, mask, gt):
+        mask = mask.copy()
+        
+        w1    = [22]   # weight of bilateral term
+        alpha = [12]   # spatial std
+        beta  = [3.1]  # rgb std
+        w2    = [8]    # weight of spatial term
+        gamma = [1.8]  # spatial std
+        it    = [10]   # iteration
+        res = []
+        params = []
+        for param in [(a,b,c,d,e,i) for a in w1 for b in alpha for c in beta for d in w2 for e in gamma for i in it]:
+            M = mask
+            maskframe = M[0]
+            prob = np.stack((1-maskframe, maskframe), axis=-1)
+            seg = denseCRF.denseCRF((255*orig).astype(np.uint8), prob, param)
+            
+            M[0] = seg
+            M = M.transpose(0, 2, 3, 1).astype(np.bool)
+    
+            r = np.sum(gt & M) / np.sum(gt | M) # iou
+            res.append(r)
+            params.append(param)
+
+        res = np.array(res)
+        order = np.argsort(res)
+        res = res[order]
+        params = np.array(params)[order]
+        mask = M.transpose(0,3,1,2)
+
+        return (mask >= 1)
 
 def get_iou(G, T):
     tp = np.sum(G & T) # intersection i.e. true positive
@@ -46,13 +78,16 @@ def load_textured_minerl():
 
     return text_dset, gt_dset
 
-def create_video(trajectories, masks=True):
+# source: https://github.com/python-pillow/Pillow/issues/4263
+def create_video(trajectory, masks=True):
     print('creating videos...')
-    for i, frames in enumerate(trajectories):
-        if masks:
-            frames[0].save(f"videos/video-threshold={THRESHOLD}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=frames[1:])
-        else:
-            frames[0].save(f"videos/video-{i+1}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=frames[1:])
+    byteframes = []
+    for f in trajectory[0]:
+        byte = BytesIO()
+        byteframes.append(byte)
+        f.save(byte, format="GIF")
+    imgs = [Image.open(byteframe) for byteframe in byteframes]
+    imgs[0].save(f"videos/video-threshold={THRESHOLD}.gif", format='GIF', duration=2000, save_all=True, loop=0, append_images=imgs[1:])
 
 def concat_frames(trajs1, trajs2, masks=False, ious=None):
     print('concatting frames...')
@@ -88,7 +123,7 @@ def concat_frames(trajs1, trajs2, masks=False, ious=None):
 
 def get_diff_factor(max_values):
     mean_max = statistics.mean(max_values)
-    diff_factor = 255 / mean_max if mean_max != 0 else 0
+    diff_factor = 1.0 / mean_max if mean_max != 0 else 0
 
     return diff_factor, mean_max
 
@@ -155,6 +190,7 @@ def eval_textured_frames(trajectory, vae, critic, gt, second=False, t=THRESHOLD)
 
     for img in imgs:
         diff = prepare_diff(img[3], diff_factor, mean_max)
+        diff = (diff * 255).astype(np.uint8)
         diff_img = Image.fromarray(diff)
 
         thresholded = diff > t
@@ -258,7 +294,7 @@ def get_injected_img(autoencoder, img_tensor, pred):
 
     return img
 
-def get_diff_image(autoencoder, img_tensor, pred, hsv=False):
+def get_diff_image(autoencoder, img_tensor, pred):
     high_tensor = torch.ones(1).to(device)
     low_tensor = torch.zeros(1).to(device)
 
@@ -268,10 +304,9 @@ def get_diff_image(autoencoder, img_tensor, pred, hsv=False):
     recon_one = to_np(recon_one.view(-1, ch, w, w)[0])
     recon_zero = to_np(recon_zero.view(-1, ch, w, w)[0])
 
-    diff = cv2.subtract(recon_zero, recon_one)
+    diff = np.subtract(recon_zero, recon_one)
     diff = abs(diff)
     diff = np.transpose(diff, (1, 2, 0))
-    diff = matplotlib.colors.hsv_to_rgb(diff)
     diff = np.dot(diff[...,:3], [0.2989, 0.5870, 0.1140]) # to greyscale
     #diff = (diff * 255).astype(np.uint8)
     max_value = np.amax(diff)
@@ -308,25 +343,21 @@ def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred, gt_img=No
 
     return img
 
-def adjust_values(obs, hsv):
+def adjust_values(obs):
     img_array = np.array(obs).astype(np.float32)
     img_array /= 255 # to range 0-1
-    if hsv:
-        img_array = matplotlib.colors.rgb_to_hsv(img_array)
    
     return img_array
 
-def reverse_preprocess(obs, hsv=False):
+def reverse_preprocess(recon):
     recon = to_np(recon.view(-1, ch, w, w)[0])
-    if hsv:
-        recon = matplotlib.colors.hsv_to_rgb(recon)
     recon = recon.transpose(1, 2, 0) # from CHW to HWC
     recon = (recon * 255).astype(np.uint8)
 
     return recon
 
-def preprocess_observation(obs, hsv=False):
-    img_array = adjust_values(obs, hsv=hsv)
+def preprocess_observation(obs):
+    img_array = adjust_values(obs)
     img_array = img_array.transpose(2, 0, 1) # HWC to CHW for critic
     img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
     img_tensor = Tensor(img_array).to(device)
@@ -361,8 +392,6 @@ def load_critic(path):
     return critic
 
 def log_info(losses, logger, batch_i, ep, num_samples):
-    print(f'    ep{ep} batch{batch_i+1}', end='\r')
-
     info = {
         'recon_loss': losses['recon_loss'].item(),
         'kld': losses['KLD'].item(),
@@ -377,18 +406,17 @@ def to_np(x):
 
 def prepare_rgb_image(img_array): # numpy_array
     img_array = np.transpose(img_array, (1, 2, 0)) # CHW to HWC
-    img_array = matplotlib.colors.hsv_to_rgb(img_array)
     img_array = (img_array * 255).astype(np.uint8)
     image = Image.fromarray(img_array, mode='RGB')
 
     return img_array, image
 
-def prepare_recon_dset(dset, hsv=False):
+def prepare_recon_dset(dset):
     for obs in dset:
-        obs = preprocess_observation(obs, hsv=hsv)
+        obs = preprocess_observation(obs)
 
 # source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
-def load_minerl_data(critic, hsv=False, recon_dset=False, vae=None):
+def load_minerl_data(critic, recon_dset=False, vae=None):
     print("loading minerl-data...")
 
     ### Initialize mineRL dataset ###
@@ -399,7 +427,7 @@ def load_minerl_data(critic, hsv=False, recon_dset=False, vae=None):
     rng = np.random.default_rng(seed=0)
     rng.shuffle(trajectory_names)
     
-    collect = 300
+    collect = 150
     dset = []
     # Add trajectories to the data until we reach the required DATA_SAMPLES.
     for trajectory_name in trajectory_names:
@@ -408,11 +436,12 @@ def load_minerl_data(critic, hsv=False, recon_dset=False, vae=None):
 
         print(f'total images = {len(dset)}')
         c_high = 0
+        c_mid = 0
         c_low = 0
         trajectory = data.load_data(trajectory_name, skip_interval=0, include_metadata=False)
         for dataset_observation, _, _, _, _ in trajectory:
             obs = dataset_observation["pov"]
-            obs = preprocess_observation(obs, hsv=hsv)
+            obs = preprocess_observation(obs)
             pred, _ = critic.evaluate(obs)
             pred = pred[0]
             
@@ -420,12 +449,15 @@ def load_minerl_data(critic, hsv=False, recon_dset=False, vae=None):
                 obs = vae.evaluate(obs, pred)
                 obs = reverse_preprocess(obs)
 
-            if c_high >= collect and c_low >= collect:
+            if c_high >= collect and c_low >= collect and c_mid >= collect:
                 break
-            if pred >= CRIT_THRESHOLD and c_high < collect:
+            elif 0.4 <= pred <= 0.6 and c_mid < collect:
+                dset.append(obs)
+                c_mid += 1
+            elif pred >= 0.75 and c_high < collect:
                 dset.append(obs)
                 c_high += 1
-            elif pred < CRIT_THRESHOLD and c_low < collect:
+            elif pred <= 0.25 and c_low < collect:
                 dset.append(obs)
                 c_low += 1
 

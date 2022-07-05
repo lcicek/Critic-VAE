@@ -16,7 +16,7 @@ import statistics
 from vae_parameters import *
 from vae_nets import *
 from vae_utility import *
-from logger import Logger
+#from logger import Logger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-t', action='store_true') # train
@@ -27,6 +27,7 @@ parser.add_argument('-evalsecond', action='store_true')
 parser.add_argument('-video', action='store_true')
 parser.add_argument('-masks', action='store_true')
 parser.add_argument('-tt', action='store_true') # test threshold
+parser.add_argument('-evalch', action='store_true')
 args = parser.parse_args()
 
 DEBUG = False
@@ -38,7 +39,7 @@ EVAL_SECOND_VAE = args.evalsecond
 VIDEO = args.video
 MASKS = args.masks
 
-def train(autoencoder, dset, logger):
+def train(autoencoder, dset, logger=None):
     dset = torch.stack(dset).squeeze()
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
@@ -53,7 +54,8 @@ def train(autoencoder, dset, logger):
             batch_indices = epoch_indices[batch_i:batch_i + batch_size]
             images = dset[batch_indices]
 
-            preds, _ = critic.evaluate(images)
+            preds, embeds = critic.evaluate(images)
+            last_crit_layer = embeds[4]
 
             opt.zero_grad()
             out = autoencoder(images, preds)
@@ -63,11 +65,38 @@ def train(autoencoder, dset, logger):
             opt.step()
 
             if batch_i % log_n == 0:
-                log_info(losses, logger, batch_i, ep, num_samples)
+                print(f'    ep:{ep}, imgs:{(batch_i+1) * ep + (batch_i+1)}', end='\r')
+                
+                if logger is not None:
+                    log_info(losses, logger, batch_i, ep, num_samples)
 
     return autoencoder
 
-def image_evaluate(autoencoder, critic, hsv=False):
+def channel_evaluate(autoencoder, critic):
+    print('evaluating source images...')
+    folder = os.listdir(EVAL_IMAGES_PATH)
+    count = 0
+    for i, img_file in enumerate(folder):
+        if count == 10:
+            break
+        
+        count += 1
+        
+        ### LOAD IMAGES AND PREPROCESS ###
+        orig_img = Image.open(f'{EVAL_IMAGES_PATH}/{img_file}')
+        img_array = adjust_values(orig_img)
+        img_array = img_array.transpose(2, 0, 1) # HWC to CHW for critic
+        img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
+        img_tensor = Tensor(img_array).to(device)
+
+        preds, _ = critic.evaluate(img_tensor)
+        img = autoencoder.evaluate_ch(img_tensor, preds[0])
+        img = img.transpose(1, 2, 0)
+        img = Image.fromarray(img)
+
+        img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
+
+def image_evaluate(autoencoder, critic):
     print('evaluating source images...')
     folder = os.listdir(EVAL_IMAGES_PATH)
     imgs = []
@@ -75,7 +104,7 @@ def image_evaluate(autoencoder, critic, hsv=False):
     for i, img_file in enumerate(folder):
         ### LOAD IMAGES AND PREPROCESS ###
         orig_img = Image.open(f'{EVAL_IMAGES_PATH}/{img_file}')
-        img_array = adjust_values(orig_img, hsv=hsv)
+        img_array = adjust_values(orig_img)
         img_array = img_array.transpose(2, 0, 1) # HWC to CHW for critic
         img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
         img_tensor = Tensor(img_array).to(device)
@@ -166,8 +195,8 @@ elif TRAIN_SECOND_VAE:
 
     recon_dset = prepare_recon_dset(recon_dset)
 
-    logger = Logger('./logs/vae' + str(time())[-5::])
-    vae = train(vae, recon_dset, logger)
+    # logger = Logger('./logs/vae' + str(time())[-5::])
+    vae = train(vae, recon_dset)
 
     torch.save(vae.encoder.state_dict(), SECOND_ENCODER_PATH)
     torch.save(vae.decoder.state_dict(), SECOND_DECODER_PATH)
@@ -180,11 +209,11 @@ else: # REGULAR VAE
     dset = load_minerl_data(critic)
 
     if True:
-        logger = Logger('./logs/vae' + str(time())[-5::])
-        vae = train(vae, dset, logger)
+        #logger = Logger('./logs/vae' + str(time())[-5::])
+        vae = train(vae, dset)
 
         torch.save(vae.encoder.state_dict(), ENCODER_PATH)
         torch.save(vae.decoder.state_dict(), DECODER_PATH)
     else: # EVALUATE
         load_vae_network(vae)
-        image_evaluate(vae, critic, hsv=True)
+        image_evaluate(vae, critic)

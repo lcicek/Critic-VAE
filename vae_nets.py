@@ -5,7 +5,7 @@ from vae_parameters import *
 from math import exp
 
 class VariationalAutoencoder(nn.Module):
-    def __init__(self, dims=[32, 64, 128, 256]):
+    def __init__(self, dims=[16, 32, 64]):
         super(VariationalAutoencoder, self).__init__()
         self.encoder = VariationalEncoder(dims)
         self.decoder = Decoder(dims)
@@ -38,6 +38,42 @@ class VariationalAutoencoder(nn.Module):
             recons.append(recon)
         
         return recons
+
+    def evaluate_ch(self, x, reward):
+        import numpy as np
+        mu, _ = self.encoder(x)
+        mu = mu.squeeze()
+
+        ch_imgs = []
+        for j in range(len(mu)): # 32
+            down = torch.clone(mu)
+            up = torch.clone(mu) 
+
+            down[j] = -1
+            up[j] = 1
+
+            down = down.unsqueeze(dim=0)
+            up = up.unsqueeze(dim=0)
+
+            down = self.decoder(down, reward.view(1), evalu=True)
+            up = self.decoder(up, reward.view(1), evalu=True)
+
+            down = down.view(-1, ch, w, w)[0].data.cpu().numpy()
+            up = up.view(-1, ch, w, w)[0].data.cpu().numpy()
+
+            down_recon = (down * 255).astype(np.uint8)
+            up_recon = (up * 255).astype(np.uint8)
+            full = np.concatenate([down_recon, up_recon], axis=2)
+            ch_imgs.append(full)
+
+        x = x.view(-1, ch, w, w)[0].data.cpu().numpy()
+        x = (x * 255).astype(np.uint8)
+        x = np.concatenate([x, x], axis=2)
+
+        ch_imgs.append(x)
+        final = np.concatenate(ch_imgs, axis=1)
+
+        return final
 
     def evaluate(self, x, reward):
         mu, _ = self.encoder(x)
@@ -80,11 +116,16 @@ class VariationalEncoder(nn.Module):
                         nn.MaxPool2d(2), # to 8x8x128
                         nn.ReLU(),
                         
-                        nn.Conv2d(dims[2], dims[3], k, step, p), # to 8x8x256
-                        nn.BatchNorm2d(dims[3]),
-                        nn.MaxPool2d(2), # to 4x4x256
-                        nn.ReLU(),
+                        #nn.Conv2d(dims[2], dims[3], k, step, p), # to 8x8x256
+                        #nn.BatchNorm2d(dims[3]),
+                        #nn.MaxPool2d(2), # to 4x4x256
+                        #nn.ReLU(),
                     )
+
+        self.fcs = nn.Sequential(
+            nn.Linear(bottleneck, bottleneck),
+            nn.Linear(bottleneck, bottleneck)
+        )
 
         # mu = mean, sigma = var; "fc" = fully connected layer
         self.fc_mu = nn.Linear(bottleneck, latent_dim)
@@ -95,6 +136,7 @@ class VariationalEncoder(nn.Module):
             x = layer(x)
 
         z_flat = torch.flatten(x, start_dim=1)
+        z_flat = self.fcs(z_flat)
 
         mu = self.fc_mu(z_flat)
         log_var = self.fc_var(z_flat)
@@ -105,9 +147,9 @@ class Decoder(nn.Module):
     def __init__(self, dims):
         super(Decoder, self).__init__()
         self.model = nn.Sequential(
-                        nn.Conv2d(dims[3], dims[2], k, step, p),
-                        nn.ReLU(),
-                        nn.Upsample(scale_factor=2),
+                        #nn.Conv2d(dims[3], dims[2], k, step, p),
+                        #nn.ReLU(),
+                        #nn.Upsample(scale_factor=2),
                         
                         nn.Conv2d(dims[2], dims[1], k, step, p),
                         nn.ReLU(),
@@ -122,25 +164,17 @@ class Decoder(nn.Module):
                         nn.Upsample(scale_factor=2),
                         
                         nn.Conv2d(dims[0], ch, k, step, p),
-                        nn.Tanh() # tanh-range is [-1, 1], sigmoid is [0, 1]
+                        nn.Sigmoid() # tanh-range is [-1, 1], sigmoid is [0, 1]
                     )
         
         self.decoder_input = nn.Linear(latent_dim+1, bottleneck)
-
-        #self.fc_layers = nn.Sequential(
-        #    nn.Linear(latent_dim, latent_dim),
-        #    nn.Tanh(),
-        #    nn.Linear(latent_dim, latent_dim),
-        #    nn.Tanh(),
-        #)
 
     def forward(self, z, reward, evalu=False, dim=1):
         if evalu:
             z = z[0] # batch_size is 1 when evaluating
             dim = 0
-        #X = self.fc_layers(z)
         X = self.decoder_input(torch.cat((z, reward), dim=dim))
-        X = X.view(-1, 256, 4, 4)
+        X = X.view(-1, 64, 8, 8)
         X = self.model(X)
 
         return X
