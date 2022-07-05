@@ -5,7 +5,7 @@ from vae_parameters import *
 from math import exp
 
 class VariationalAutoencoder(nn.Module):
-    def __init__(self, dims=[16, 32, 64]):
+    def __init__(self, dims=[32, 64, 128, 256]):
         super(VariationalAutoencoder, self).__init__()
         self.encoder = VariationalEncoder(dims)
         self.decoder = Decoder(dims)
@@ -116,10 +116,10 @@ class VariationalEncoder(nn.Module):
                         nn.MaxPool2d(2), # to 8x8x128
                         nn.ReLU(),
                         
-                        #nn.Conv2d(dims[2], dims[3], k, step, p), # to 8x8x256
-                        #nn.BatchNorm2d(dims[3]),
-                        #nn.MaxPool2d(2), # to 4x4x256
-                        #nn.ReLU(),
+                        nn.Conv2d(dims[2], dims[3], k, step, p), # to 8x8x256
+                        nn.BatchNorm2d(dims[3]),
+                        nn.MaxPool2d(2), # to 4x4x256
+                        nn.ReLU(),
                     )
 
         self.fcs = nn.Sequential(
@@ -147,9 +147,9 @@ class Decoder(nn.Module):
     def __init__(self, dims):
         super(Decoder, self).__init__()
         self.model = nn.Sequential(
-                        #nn.Conv2d(dims[3], dims[2], k, step, p),
-                        #nn.ReLU(),
-                        #nn.Upsample(scale_factor=2),
+                        nn.Conv2d(dims[3], dims[2], k, step, p),
+                        nn.ReLU(),
+                        nn.Upsample(scale_factor=2),
                         
                         nn.Conv2d(dims[2], dims[1], k, step, p),
                         nn.ReLU(),
@@ -174,7 +174,7 @@ class Decoder(nn.Module):
             z = z[0] # batch_size is 1 when evaluating
             dim = 0
         X = self.decoder_input(torch.cat((z, reward), dim=dim))
-        X = X.view(-1, 64, 8, 8)
+        X = X.view(-1, 256, 4, 4)
         X = self.model(X)
 
         return X

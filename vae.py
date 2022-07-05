@@ -65,7 +65,7 @@ def train(autoencoder, dset, logger=None):
             opt.step()
 
             if batch_i % log_n == 0:
-                print(f'    ep:{ep}, imgs:{(batch_i+1) * ep + (batch_i+1)}', end='\r')
+                print(f'    ep:{ep}, imgs:{num_samples*ep + (batch_i+1)}', end='\r')
                 
                 if logger is not None:
                     log_info(losses, logger, batch_i, ep, num_samples)
@@ -187,13 +187,14 @@ elif CREATE_DATASET:
         pickle.dump(dset, file)
 elif TRAIN_SECOND_VAE:
     print('training second vae...')
-    critic = load_critic(SECOND_CRITIC_PATH)
+    #critic = load_critic(SECOND_CRITIC_PATH)
+    critic = load_critic(CRITIC_PATH)
 
     print('preparing dataset...')
     with open(SAVE_DATASET_PATH, 'rb') as file:
         recon_dset = pickle.load(file)
 
-    recon_dset = prepare_recon_dset(recon_dset)
+    #recon_dset = prepare_recon_dset(recon_dset)
 
     # logger = Logger('./logs/vae' + str(time())[-5::])
     vae = train(vae, recon_dset)

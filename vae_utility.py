@@ -412,8 +412,10 @@ def prepare_rgb_image(img_array): # numpy_array
     return img_array, image
 
 def prepare_recon_dset(dset):
-    for obs in dset:
-        obs = preprocess_observation(obs)
+    for i, obs in enumerate(dset):
+        dset[i] = preprocess_observation(obs)
+
+    return dset
 
 # source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
 def load_minerl_data(critic, recon_dset=False, vae=None):
@@ -447,7 +449,7 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
             
             if recon_dset:
                 obs = vae.evaluate(obs, pred)
-                obs = reverse_preprocess(obs)
+                #obs = reverse_preprocess(obs)
 
             if c_high >= collect and c_low >= collect and c_mid >= collect:
                 break

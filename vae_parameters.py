@@ -8,7 +8,7 @@ ch = 3 # image channels
 ### TRAINING DATA ###
 epochs = 15
 batch_size = 128
-lr = 0.0001
+lr = 0.00005
 k = 5 # kernel size
 p = 2 # padding
 step = 1
