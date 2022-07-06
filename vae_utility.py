@@ -1,5 +1,4 @@
 from io import BytesIO
-from pydensecrf import densecrf as denseCRF
 import os
 import minerl
 import statistics
@@ -16,39 +15,7 @@ from vae_nets import *
 
 THRESHOLD = 40
 font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
-titles = ["orig img\n+crit val", "crit=1\ninjected", "crit=0\ninjected", "difference\nmask", f"thresholded\nmask\nthr={THRESHOLD}", "ground\ntruth"]
-
-def crf(orig, mask, gt):
-        mask = mask.copy()
-        
-        w1    = [22]   # weight of bilateral term
-        alpha = [12]   # spatial std
-        beta  = [3.1]  # rgb std
-        w2    = [8]    # weight of spatial term
-        gamma = [1.8]  # spatial std
-        it    = [10]   # iteration
-        res = []
-        params = []
-        for param in [(a,b,c,d,e,i) for a in w1 for b in alpha for c in beta for d in w2 for e in gamma for i in it]:
-            M = mask
-            maskframe = M[0]
-            prob = np.stack((1-maskframe, maskframe), axis=-1)
-            seg = denseCRF.denseCRF((255*orig).astype(np.uint8), prob, param)
-            
-            M[0] = seg
-            M = M.transpose(0, 2, 3, 1).astype(np.bool)
-    
-            r = np.sum(gt & M) / np.sum(gt | M) # iou
-            res.append(r)
-            params.append(param)
-
-        res = np.array(res)
-        order = np.argsort(res)
-        res = res[order]
-        params = np.array(params)[order]
-        mask = M.transpose(0,3,1,2)
-
-        return (mask >= 1)
+titles = ["orig img\n+crit val", "crit val\ninjected", "crit=0\ninjected", "difference\nmask", f"thresholded\nmask\nthr={THRESHOLD}", "ground\ntruth"]
 
 def get_iou(G, T):
     tp = np.sum(G & T) # intersection i.e. true positive
@@ -80,14 +47,14 @@ def load_textured_minerl():
 
 # source: https://github.com/python-pillow/Pillow/issues/4263
 def create_video(trajectory, masks=True):
-    print('creating videos...')
+    print('creating video...')
     byteframes = []
     for f in trajectory[0]:
         byte = BytesIO()
         byteframes.append(byte)
         f.save(byte, format="GIF")
     imgs = [Image.open(byteframe) for byteframe in byteframes]
-    imgs[0].save(f"videos/video-threshold={THRESHOLD}.gif", format='GIF', duration=2000, save_all=True, loop=0, append_images=imgs[1:])
+    imgs[0].save(f"videos/video-threshold={THRESHOLD}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=imgs[1:])
 
 def concat_frames(trajs1, trajs2, masks=False, ious=None):
     print('concatting frames...')
@@ -109,7 +76,7 @@ def concat_frames(trajs1, trajs2, masks=False, ious=None):
                 draw = ImageDraw.Draw(conc_f)
                 for i, title in enumerate(titles):
                     if (i == 5):
-                        title += f"\niou1={ious[0]}\niou2={ious[1]}"
+                        title += f"\niou1={ious[0]:03d}\niou2={ious[1]:03d}"
                     draw.text((w*i+2, 0), title, (255,255,255), font=font)
 
             conc_f.paste(f1, (0, w))
@@ -223,35 +190,6 @@ def eval_textured_frames(trajectory, vae, critic, gt, second=False, t=THRESHOLD)
 
     return ret, final_iou, final_fn_rate, final_fp_rate
 
-def evaluate_frames(trajectories, vae, critic):
-    print('processing frames...')
-    ret = []
-    for trajectory in trajectories:
-        imgs = []
-        results = []
-        diff_max_values = []
-
-        for frame in trajectory:
-            preds, _ = critic.evaluate(frame)
-
-            ro, rz, diff, max_value = get_diff_image(vae, frame, preds[0])
-            diff_max_values.append(max_value)
-
-            imgs.append([frame, ro, rz, diff, preds[0]])
-        
-        diff_factor, mean_max = get_diff_factor(diff_max_values)
-
-        for img in imgs:
-            diff = prepare_diff(img[3], diff_factor, mean_max)
-            diff_img = Image.fromarray(diff)
-
-            result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
-            results.append(result_img)
-
-        ret.append(results)
-
-    return ret
-
 def collect_frames(trajectory_names): # returns list of (64, 64, 3) images for each trajectory
     print('collecting frames...')
     import os
@@ -295,7 +233,7 @@ def get_injected_img(autoencoder, img_tensor, pred):
     return img
 
 def get_diff_image(autoencoder, img_tensor, pred):
-    high_tensor = torch.ones(1).to(device)
+    high_tensor = torch.zeros(1).to(device) + pred
     low_tensor = torch.zeros(1).to(device)
 
     recon_one = autoencoder.evaluate(img_tensor, high_tensor)
@@ -411,12 +349,6 @@ def prepare_rgb_image(img_array): # numpy_array
 
     return img_array, image
 
-def prepare_recon_dset(dset):
-    for i, obs in enumerate(dset):
-        dset[i] = preprocess_observation(obs)
-
-    return dset
-
 # source: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L105
 def load_minerl_data(critic, recon_dset=False, vae=None):
     print("loading minerl-data...")
@@ -429,11 +361,12 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
     rng = np.random.default_rng(seed=0)
     rng.shuffle(trajectory_names)
     
+    total_img_count = 100000 if recon_dset else 50000
     collect = 150
     dset = []
     # Add trajectories to the data until we reach the required DATA_SAMPLES.
     for trajectory_name in trajectory_names:
-        if len(dset) >= 50000:
+        if len(dset) >= total_img_count:
             break
 
         print(f'total images = {len(dset)}')
@@ -448,24 +381,38 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
             pred = pred[0]
             
             if recon_dset:
-                obs = vae.evaluate(obs, pred)
+                if pred <= 0.3:
+                    continue
+                
+                obs_high = vae.evaluate(obs, torch.zeros(1).to(device) + pred)                
+                obs_low = vae.evaluate(obs, torch.zeros(1).to(device))
                 #obs = reverse_preprocess(obs)
 
-            if c_high >= collect and c_low >= collect and c_mid >= collect:
-                break
-            elif 0.4 <= pred <= 0.6 and c_mid < collect:
-                dset.append(obs)
-                c_mid += 1
-            elif pred >= 0.75 and c_high < collect:
-                dset.append(obs)
-                c_high += 1
-            elif pred <= 0.25 and c_low < collect:
-                dset.append(obs)
-                c_low += 1
+                #print(f'memory:: high:{torch.cuda.memory_allocated(obs_high)}, low:{torch.cuda.memory_allocated(obs_low)}, obs: {torch.cuda.memory_allocated(obs)}')
+
+                if c_mid >= collect * 2:
+                    break
+                else:
+                    dset.append(obs_high.detach().cpu().numpy())
+                    dset.append(obs_low.detach().cpu().numpy())
+                    c_mid += 1
+            else:
+                obs = obs.detach().cpu().numpy()
+
+                if c_high >= collect and c_low >= collect and c_mid >= collect:
+                    break
+                elif 0.4 <= pred <= 0.6 and c_mid < collect:
+                    dset.append(obs)
+                    c_mid += 1
+                elif pred >= 0.75 and c_high < collect:
+                    dset.append(obs)
+                    c_high += 1
+                elif pred <= 0.25 and c_low < collect:
+                    dset.append(obs)
+                    c_low += 1
 
     rng.shuffle(dset)
     #low_val = np.array(dset)
     
     del data # without this line, error gets thrown at the end of the program
     return dset
-    

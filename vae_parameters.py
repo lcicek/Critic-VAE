@@ -1,6 +1,6 @@
 import torch
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-#device = 'cpu'
+#device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = 'cpu'
 ### IMAGE DATA ###
 w = 64 # original image width
 ch = 3 # image channels
@@ -26,8 +26,8 @@ EVAL_IMAGES_PATH = '/homes/lcicek/Desktop/AAE/source-images'
 SAVE_PATH = '/homes/lcicek/Desktop/AAE/images'
 SAVE_DATASET_PATH = '/homes/lcicek/Desktop/AAE/recon-dataset.pickle'
 
-SECOND_ENCODER_PATH = 'saved-networks/second_vae_encoder_weights.pt'
-SECOND_DECODER_PATH = 'saved-networks/second_vae_decoder_weights.pt'
+SECOND_ENCODER_PATH = 'vae2_encoder.pt'
+SECOND_DECODER_PATH = 'vae2_decoder.pt'
 
 CRITIC_PATH = '/homes/lcicek/Desktop/AAE/saved-networks/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=99999-shift=12-chfak=1-dropout=0.3.pt'
 SECOND_CRITIC_PATH = '/homes/lcicek/Desktop/AAE/saved-networks/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=100000-shift=12-chfak=1-dropout=0.3.pt'

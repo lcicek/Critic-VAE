@@ -39,42 +39,6 @@ class VariationalAutoencoder(nn.Module):
         
         return recons
 
-    def evaluate_ch(self, x, reward):
-        import numpy as np
-        mu, _ = self.encoder(x)
-        mu = mu.squeeze()
-
-        ch_imgs = []
-        for j in range(len(mu)): # 32
-            down = torch.clone(mu)
-            up = torch.clone(mu) 
-
-            down[j] = -1
-            up[j] = 1
-
-            down = down.unsqueeze(dim=0)
-            up = up.unsqueeze(dim=0)
-
-            down = self.decoder(down, reward.view(1), evalu=True)
-            up = self.decoder(up, reward.view(1), evalu=True)
-
-            down = down.view(-1, ch, w, w)[0].data.cpu().numpy()
-            up = up.view(-1, ch, w, w)[0].data.cpu().numpy()
-
-            down_recon = (down * 255).astype(np.uint8)
-            up_recon = (up * 255).astype(np.uint8)
-            full = np.concatenate([down_recon, up_recon], axis=2)
-            ch_imgs.append(full)
-
-        x = x.view(-1, ch, w, w)[0].data.cpu().numpy()
-        x = (x * 255).astype(np.uint8)
-        x = np.concatenate([x, x], axis=2)
-
-        ch_imgs.append(x)
-        final = np.concatenate(ch_imgs, axis=1)
-
-        return final
-
     def evaluate(self, x, reward):
         mu, _ = self.encoder(x)
         recon = self.decoder(mu, reward.view(1), evalu=True)
@@ -124,7 +88,9 @@ class VariationalEncoder(nn.Module):
 
         self.fcs = nn.Sequential(
             nn.Linear(bottleneck, bottleneck),
-            nn.Linear(bottleneck, bottleneck)
+            nn.ReLU(),
+            nn.Linear(bottleneck, bottleneck),
+            nn.ReLU()
         )
 
         # mu = mean, sigma = var; "fc" = fully connected layer
@@ -164,9 +130,9 @@ class Decoder(nn.Module):
                         nn.Upsample(scale_factor=2),
                         
                         nn.Conv2d(dims[0], ch, k, step, p),
-                        nn.Sigmoid() # tanh-range is [-1, 1], sigmoid is [0, 1]
+                        nn.Tanh() # tanh-range is [-1, 1], sigmoid is [0, 1]
                     )
-        
+
         self.decoder_input = nn.Linear(latent_dim+1, bottleneck)
 
     def forward(self, z, reward, evalu=False, dim=1):

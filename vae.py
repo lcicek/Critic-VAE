@@ -27,7 +27,6 @@ parser.add_argument('-evalsecond', action='store_true')
 parser.add_argument('-video', action='store_true')
 parser.add_argument('-masks', action='store_true')
 parser.add_argument('-tt', action='store_true') # test threshold
-parser.add_argument('-evalch', action='store_true')
 args = parser.parse_args()
 
 DEBUG = False
@@ -40,7 +39,8 @@ VIDEO = args.video
 MASKS = args.masks
 
 def train(autoencoder, dset, logger=None):
-    dset = torch.stack(dset).squeeze()
+    #frames, gt_frames = load_textured_minerl()
+    dset = np.stack(dset).squeeze()
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
 
@@ -53,9 +53,9 @@ def train(autoencoder, dset, logger=None):
             # NOTE: this will cut off incomplete batches from end of the random indices
             batch_indices = epoch_indices[batch_i:batch_i + batch_size]
             images = dset[batch_indices]
+            images = Tensor(images).to(device)
 
-            preds, embeds = critic.evaluate(images)
-            last_crit_layer = embeds[4]
+            preds, _ = critic.evaluate(images)
 
             opt.zero_grad()
             out = autoencoder(images, preds)
@@ -70,31 +70,13 @@ def train(autoencoder, dset, logger=None):
                 if logger is not None:
                     log_info(losses, logger, batch_i, ep, num_samples)
 
+        #vae.eval()
+        #with torch.no_grad():
+        #    _, iou, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
+        #    print(f"epoch {ep} has iou={iou} and fnr={fnr}, fpr={fpr}")
+        #vae.train()
+
     return autoencoder
-
-def channel_evaluate(autoencoder, critic):
-    print('evaluating source images...')
-    folder = os.listdir(EVAL_IMAGES_PATH)
-    count = 0
-    for i, img_file in enumerate(folder):
-        if count == 10:
-            break
-        
-        count += 1
-        
-        ### LOAD IMAGES AND PREPROCESS ###
-        orig_img = Image.open(f'{EVAL_IMAGES_PATH}/{img_file}')
-        img_array = adjust_values(orig_img)
-        img_array = img_array.transpose(2, 0, 1) # HWC to CHW for critic
-        img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
-        img_tensor = Tensor(img_array).to(device)
-
-        preds, _ = critic.evaluate(img_tensor)
-        img = autoencoder.evaluate_ch(img_tensor, preds[0])
-        img = img.transpose(1, 2, 0)
-        img = Image.fromarray(img)
-
-        img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
 
 def image_evaluate(autoencoder, critic):
     print('evaluating source images...')
@@ -151,14 +133,13 @@ if VIDEO or DEBUG:
         frames = collect_frames(trajectory_names)
 
     if args.tt:
-        for t in range(0, 125, 10):
+        for t in range(0, 130, 10):
             _, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, t=t)
             print(f't={t}, iou={iou1}, fnr={fnr}, fpr={fpr}')
-        sys.exit()
-
-    vae_frames, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
-    print(f'fn_rate = {fnr}')
-    print(f'fp_rate = {fpr}')
+    else:
+        vae_frames, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
+        print(f'fn_rate = {fnr}')
+        print(f'fp_rate = {fpr}')
 
     # get images from second vae
     vae = VariationalAutoencoder().to(device) # new
@@ -166,7 +147,7 @@ if VIDEO or DEBUG:
     critic = load_critic(SECOND_CRITIC_PATH)
 
     if args.tt:
-        for t in range(0, 125, 10):
+        for t in range(0, 130, 10):
             _, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, second=True, t=t)
             print(f't={t}, iou={iou1}, fnr={fnr}, fpr={fpr}')
         sys.exit()
@@ -187,14 +168,11 @@ elif CREATE_DATASET:
         pickle.dump(dset, file)
 elif TRAIN_SECOND_VAE:
     print('training second vae...')
-    #critic = load_critic(SECOND_CRITIC_PATH)
     critic = load_critic(CRITIC_PATH)
 
     print('preparing dataset...')
     with open(SAVE_DATASET_PATH, 'rb') as file:
         recon_dset = pickle.load(file)
-
-    #recon_dset = prepare_recon_dset(recon_dset)
 
     # logger = Logger('./logs/vae' + str(time())[-5::])
     vae = train(vae, recon_dset)
@@ -202,14 +180,14 @@ elif TRAIN_SECOND_VAE:
     torch.save(vae.encoder.state_dict(), SECOND_ENCODER_PATH)
     torch.save(vae.decoder.state_dict(), SECOND_DECODER_PATH)
 elif EVAL_SECOND_VAE:
-    critic = load_critic(SECOND_CRITIC_PATH)
+    critic = load_critic(CRITIC_PATH)
     load_vae_network(vae, second_vae=True)
     image_evaluate(vae, critic)
 else: # REGULAR VAE
     critic = load_critic(CRITIC_PATH)
     dset = load_minerl_data(critic)
 
-    if True:
+    if TRAIN:
         #logger = Logger('./logs/vae' + str(time())[-5::])
         vae = train(vae, dset)
 
