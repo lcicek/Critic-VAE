@@ -13,7 +13,7 @@ from collections import defaultdict
 from vae_parameters import *
 from vae_nets import *
 
-THRESHOLD = 40
+THRESHOLD = 50
 font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
 titles = ["orig img\n+crit val", "crit val\ninjected", "crit=0\ninjected", "difference\nmask", f"thresholded\nmask\nthr={THRESHOLD}", "ground\ntruth"]
 
@@ -76,7 +76,7 @@ def concat_frames(trajs1, trajs2, masks=False, ious=None):
                 draw = ImageDraw.Draw(conc_f)
                 for i, title in enumerate(titles):
                     if (i == 5):
-                        title += f"\niou1={ious[0]:03d}\niou2={ious[1]:03d}"
+                        title += f"\niou1={ious[0]:03f}\niou2={ious[1]:03f}"
                     draw.text((w*i+2, 0), title, (255,255,255), font=font)
 
             conc_f.paste(f1, (0, w))
@@ -361,7 +361,7 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
     rng = np.random.default_rng(seed=0)
     rng.shuffle(trajectory_names)
     
-    total_img_count = 100000 if recon_dset else 50000
+    total_img_count = 75000 if recon_dset else 50000
     collect = 150
     dset = []
     # Add trajectories to the data until we reach the required DATA_SAMPLES.

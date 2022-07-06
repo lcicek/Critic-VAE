@@ -136,6 +136,7 @@ if VIDEO or DEBUG:
         for t in range(0, 130, 10):
             _, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, t=t)
             print(f't={t}, iou={iou1}, fnr={fnr}, fpr={fpr}')
+            break
     else:
         vae_frames, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
         print(f'fn_rate = {fnr}')
@@ -144,7 +145,7 @@ if VIDEO or DEBUG:
     # get images from second vae
     vae = VariationalAutoencoder().to(device) # new
     load_vae_network(vae, second_vae=True)
-    critic = load_critic(SECOND_CRITIC_PATH)
+    #critic = load_critic(SECOND_CRITIC_PATH)
 
     if args.tt:
         for t in range(0, 130, 10):
