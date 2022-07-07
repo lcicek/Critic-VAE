@@ -54,11 +54,12 @@ def train(autoencoder, dset, logger=None):
             batch_indices = epoch_indices[batch_i:batch_i + batch_size]
             images = dset[batch_indices]
             images = Tensor(images).to(device)
-
-            preds, _ = critic.evaluate(images)
-
+            
+            preds = critic.evaluate(images)
             opt.zero_grad()
-            out = autoencoder(images, preds)
+
+            out = autoencoder(images, preds[0])
+
             losses = autoencoder.vae_loss(out[0], out[1], out[2], out[3])
             loss = losses['total_loss']
             loss.backward()
@@ -91,14 +92,14 @@ def image_evaluate(autoencoder, critic):
         img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
         img_tensor = Tensor(img_array).to(device)
 
-        preds, _ = critic.evaluate(img_tensor)
+        pred = critic.evaluate(img_tensor)
 
         if INJECT:
-            img = get_injected_img(autoencoder, img_tensor, preds[0])
+            img = get_injected_img(autoencoder, img_tensor, pred[0])
             img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
         else:
-            ro, rz, diff, max_value = get_diff_image(autoencoder, img_tensor, preds[0])
-            imgs.append([img_tensor,ro, rz, diff, preds[0]])
+            ro, rz, diff, max_value = get_diff_image(autoencoder, img_tensor, pred[0])
+            imgs.append([img_tensor,ro, rz, diff, pred[0]])
             diff_max_values.append(max_value)
     
     if not INJECT:
@@ -139,6 +140,7 @@ if VIDEO or DEBUG:
             break
     else:
         vae_frames, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
+        print(f'iou = {iou1}')
         print(f'fn_rate = {fnr}')
         print(f'fp_rate = {fpr}')
 
@@ -154,6 +156,7 @@ if VIDEO or DEBUG:
         sys.exit()
     
     second_vae_frames, iou2, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, second=True)
+    print(f'iou = {iou2}')
     print(f'fn_rate = {fnr}')
     print(f'fp_rate = {fpr}')
 
@@ -186,10 +189,10 @@ elif EVAL_SECOND_VAE:
     image_evaluate(vae, critic)
 else: # REGULAR VAE
     critic = load_critic(CRITIC_PATH)
-    dset = load_minerl_data(critic)
 
     if TRAIN:
         #logger = Logger('./logs/vae' + str(time())[-5::])
+        dset = load_minerl_data(critic)
         vae = train(vae, dset)
 
         torch.save(vae.encoder.state_dict(), ENCODER_PATH)

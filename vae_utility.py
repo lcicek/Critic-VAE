@@ -59,7 +59,7 @@ def create_video(trajectory, masks=True):
 def concat_frames(trajs1, trajs2, masks=False, ious=None):
     print('concatting frames...')
     all_conc = []
-
+    
     for i in range(len(trajs1)):
         conc_frames = []
         frames1 = trajs1[i]
@@ -96,9 +96,9 @@ def get_diff_factor(max_values):
 
 def save_bin_info(bins, bin_frame_count, gt_true_count, gt_mean, second):
     if second:
-        num = '1'
-    else:
         num = '2'
+    else:
+        num = '1'
 
     total_gt = np.sum(list(gt_true_count.values()))
 
@@ -108,7 +108,7 @@ def save_bin_info(bins, bin_frame_count, gt_true_count, gt_mean, second):
             count = gt_true_count[value_bin]
             f.write(f'bin: {value_bin}, pixels = {count} = {round(count/total_gt, 2) * 100}%\n')
 
-        f.write('ground truth mean and std:\n')
+        f.write('\nground truth mean and std:\n')
         for value_bin in gt_mean:
             mean = round(np.mean(gt_mean[value_bin]), 2)
             std = round(np.nanstd(gt_mean[value_bin]), 2)
@@ -134,7 +134,7 @@ def eval_textured_frames(trajectory, vae, critic, gt, second=False, t=THRESHOLD)
     for i, frame in enumerate(trajectory):
         frame = preprocess_observation(frame)
 
-        preds, _ = critic.evaluate(frame)
+        preds = critic.evaluate(frame)
 
         ro, rz, diff, max_value = get_diff_image(vae, frame, preds[0])
         diff_max_values.append(max_value)
@@ -232,8 +232,12 @@ def get_injected_img(autoencoder, img_tensor, pred):
 
     return img
 
-def get_diff_image(autoencoder, img_tensor, pred):
-    high_tensor = torch.zeros(1).to(device) + pred
+def get_diff_image(autoencoder, img_tensor, pred, one=False):
+    if one:
+        high_tensor = torch.ones(1).to(device)
+    else:
+        high_tensor = torch.zeros(1).to(device) + pred
+
     low_tensor = torch.zeros(1).to(device)
 
     recon_one = autoencoder.evaluate(img_tensor, high_tensor)
@@ -377,9 +381,9 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
         for dataset_observation, _, _, _, _ in trajectory:
             obs = dataset_observation["pov"]
             obs = preprocess_observation(obs)
-            pred, _ = critic.evaluate(obs)
+            pred = critic.evaluate(obs)
             pred = pred[0]
-            
+
             if recon_dset:
                 if pred <= 0.3:
                     continue
@@ -411,7 +415,6 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
                     dset.append(obs)
                     c_low += 1
 
-    rng.shuffle(dset)
     #low_val = np.array(dset)
     
     del data # without this line, error gets thrown at the end of the program

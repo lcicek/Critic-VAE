@@ -20,8 +20,8 @@ log_n = batch_size * 30  # data is logged every "log_n"-step
 inject_n = 6
 
 ### PATHS ###
-ENCODER_PATH = 'vae_encoder.pt'
-DECODER_PATH = 'vae_decoder.pt'
+ENCODER_PATH = 'saved-networks/vae_encoder.pt'
+DECODER_PATH = 'saved-networks/vae_decoder.pt'
 EVAL_IMAGES_PATH = '/homes/lcicek/Desktop/AAE/source-images'
 SAVE_PATH = '/homes/lcicek/Desktop/AAE/images'
 SAVE_DATASET_PATH = '/homes/lcicek/Desktop/AAE/recon-dataset.pickle'

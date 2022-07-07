@@ -124,7 +124,7 @@ class Critic(nn.Module):
     def evaluate(self, X): # was called eval_intermediate
         with torch.no_grad():
             # X = self.preprocess(X)
-            return self.forward(X, collect=True)
+            return self.forward(X, collect=False)
 
     def eval_channels(self, X, alter_layer, alter_channel, toff, collect=False): # toff = turn off 
         with torch.no_grad():

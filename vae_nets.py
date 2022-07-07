@@ -11,10 +11,10 @@ class VariationalAutoencoder(nn.Module):
         self.decoder = Decoder(dims)
         self.mssim_loss = MSSIM()
 
-    def forward(self, x, reward):
+    def forward(self, x, pred):
         mu, logvar = self.encoder(x)
         z_sample = self.reparametrize(mu, logvar)
-        recon = self.decoder(z_sample, reward)
+        recon = self.decoder(z_sample, pred)
 
         return x, mu, logvar, recon
     
@@ -39,9 +39,9 @@ class VariationalAutoencoder(nn.Module):
         
         return recons
 
-    def evaluate(self, x, reward):
+    def evaluate(self, x, pred):
         mu, _ = self.encoder(x)
-        recon = self.decoder(mu, reward.view(1), evalu=True)
+        recon = self.decoder(mu, pred.view(1), evalu=True)
 
         return recon
 
@@ -135,11 +135,11 @@ class Decoder(nn.Module):
 
         self.decoder_input = nn.Linear(latent_dim+1, bottleneck)
 
-    def forward(self, z, reward, evalu=False, dim=1):
+    def forward(self, z, pred, evalu=False, dim=1):
         if evalu:
             z = z[0] # batch_size is 1 when evaluating
             dim = 0
-        X = self.decoder_input(torch.cat((z, reward), dim=dim))
+        X = self.decoder_input(torch.cat((z, pred), dim=dim))
         X = X.view(-1, 256, 4, 4)
         X = self.model(X)
 
