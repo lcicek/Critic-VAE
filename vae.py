@@ -19,24 +19,14 @@ from vae_utility import *
 #from logger import Logger
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-t', action='store_true') # train
-parser.add_argument('-i', action='store_true') # show recons of samples
+parser.add_argument('-train', action='store_true') # train
+parser.add_argument('-inject', action='store_true') # show recons of samples
 parser.add_argument('-dataset', action='store_true') # save recons as dataset
 parser.add_argument('-second', action='store_true') # train second VAE
 parser.add_argument('-evalsecond', action='store_true')
 parser.add_argument('-video', action='store_true')
-parser.add_argument('-masks', action='store_true')
-parser.add_argument('-tt', action='store_true') # test threshold
+parser.add_argument('-thresh', action='store_true') # test threshold
 args = parser.parse_args()
-
-DEBUG = False
-TRAIN = args.t
-INJECT = args.i
-CREATE_DATASET = args.dataset
-TRAIN_SECOND_VAE = args.second
-EVAL_SECOND_VAE = args.evalsecond
-VIDEO = args.video
-MASKS = args.masks
 
 def train(autoencoder, dset, logger=None):
     frames, gt_frames = load_textured_minerl()
@@ -94,7 +84,7 @@ def image_evaluate(autoencoder, critic):
 
         pred = critic.evaluate(img_tensor)
 
-        if INJECT:
+        if args.inject:
             img = get_injected_img(autoencoder, img_tensor, pred[0])
             img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
         else:
@@ -102,7 +92,7 @@ def image_evaluate(autoencoder, critic):
             imgs.append([img_tensor,ro, rz, diff, pred[0]])
             diff_max_values.append(max_value)
     
-    if not INJECT:
+    if not args.inject:
         mean_max = statistics.mean(diff_max_values)
         diff_factor = 1 / mean_max if mean_max != 0 else 0
 
@@ -110,67 +100,37 @@ def image_evaluate(autoencoder, critic):
             diff_img = prepare_diff(img[3], diff_factor, mean_max)
             diff_img = (diff_img * 255).astype(np.uint8)
             diff_img = Image.fromarray(diff_img)
-            save_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4])
+            save_img = get_final_frame(img[0], img[1], img[2], diff_img, img[4])
 
             save_img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
     
 
 vae = VariationalAutoencoder().to(device) # GPU
 
-if VIDEO or DEBUG:
+if args.video:
     # get images from regular vae
     load_vae_network(vae)
     critic = load_critic(CRITIC_PATH)
+    frames, gt_frames = load_textured_minerl() # gt = ground truth of tree trunk
 
-    if MASKS or DEBUG:
-        frames, gt_frames = load_textured_minerl() # gt = ground truth of tree trunk
-    else:
-        trajectory_names = [
-            "v3_content_squash_angel-3_16074-17640",
-            "v3_smooth_kale_loch_ness_monster-1_4439-6272",
-            "v3_cute_breadfruit_spirit-6_17090-19102",
-            "v3_key_nectarine_spirit-2_7081-9747",
-        ]
-        frames = collect_frames(trajectory_names)
-
-    if args.tt:
+    if args.thresh:
         for t in range(0, 130, 10):
-            _, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, t=t)
-            print(f't={t}, iou={iou1}, fnr={fnr}, fpr={fpr}')
-            break
+            vae_frames, thr_iou, crf_iou = eval_textured_frames(frames, vae, critic, gt_frames, t=t)
+            print(f't={t}, thr_iou={thr_iou}, crf_iou={crf_iou}')
     else:
-        vae_frames, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
-        print(f'iou = {iou1}')
-        print(f'fn_rate = {fnr}')
-        print(f'fp_rate = {fpr}')
+        vae_frames, thr_iou, crf_iou = eval_textured_frames(frames, vae, critic, gt_frames)
+        print(f'thr_iou={thr_iou}')
+        print(f'crf_iou={crf_iou}')
 
-    # get images from second vae
-    vae = VariationalAutoencoder().to(device) # new
-    load_vae_network(vae, second_vae=True)
-    critic = load_critic(CRITIC_PATH)
-
-    if args.tt:
-        for t in range(0, 130, 10):
-            _, iou1, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, second=True, t=t)
-            print(f't={t}, iou={iou1}, fnr={fnr}, fpr={fpr}')
-        sys.exit()
-    
-    second_vae_frames, iou2, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames, second=True)
-    print(f'iou = {iou2}')
-    print(f'fn_rate = {fnr}')
-    print(f'fp_rate = {fpr}')
-
-    concatenated = concat_frames(vae_frames, second_vae_frames, masks=True, ious=(iou1, iou2))
-    create_video(concatenated)
-
-elif CREATE_DATASET:
+    create_video(vae_frames)
+elif args.dataset:
     load_vae_network(vae)
     critic = load_critic(CRITIC_PATH)
     dset = load_minerl_data(critic, recon_dset=True, vae=vae)
 
     with open(SAVE_DATASET_PATH, 'wb') as file:
         pickle.dump(dset, file)
-elif TRAIN_SECOND_VAE:
+elif args.second:
     print('training second vae...')
     critic = load_critic(CRITIC_PATH)
 
@@ -183,14 +143,14 @@ elif TRAIN_SECOND_VAE:
 
     torch.save(vae.encoder.state_dict(), SECOND_ENCODER_PATH)
     torch.save(vae.decoder.state_dict(), SECOND_DECODER_PATH)
-elif EVAL_SECOND_VAE:
+elif args.evalsecond:
     critic = load_critic(CRITIC_PATH)
     load_vae_network(vae, second_vae=True)
     image_evaluate(vae, critic)
 else: # REGULAR VAE
     critic = load_critic(CRITIC_PATH)
 
-    if TRAIN:
+    if args.train:
         #logger = Logger('./logs/vae' + str(time())[-5::])
         dset = load_minerl_data(critic)
         vae = train(vae, dset)

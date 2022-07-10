@@ -1,5 +1,7 @@
 from io import BytesIO
 import os
+import sys
+from tkinter import image_names
 import minerl
 import statistics
 import torch
@@ -9,26 +11,62 @@ import torch.distributions
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
+import denseCRF
 
 from vae_parameters import *
 from vae_nets import *
 
 THRESHOLD = 50
 font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
-titles = ["orig img\n+crit val", "crit val\ninjected", "crit=0\ninjected", "difference\nmask", f"thresholded\nmask\nthr={THRESHOLD}", "ground\ntruth"]
+titles = ["orig img\n+crit val", "crit val\ninjected", "crit=0\ninjected", "difference\nmask", f"thr-mask\nthr={THRESHOLD}", "thr-mask +\ncrf", "ground\ntruth"]
+
+def crf(imgs, mask, Y, skip=1):
+        mask = mask.copy()
+        
+        w1    = [22]   # weight of bilateral term
+        alpha = [12]   # spatial std
+        beta  = [3.1]  # rgb  std
+        w2    = [8]    # weight of spatial term
+        gamma = [1.8]  # spatial std
+        it    = [10]   # iteration
+        res = []
+        params = []
+        for param in [(a,b,c,d,e,i) for a in w1 for b in alpha for c in beta for d in w2 for e in gamma for i in it]:
+            M = mask[::skip]
+            #param = (w1, alpha, beta, w2, gamma, it)
+            for i, img in enumerate(imgs[::skip]):
+                maskframe = M[i,0]
+                prob = np.stack((1-maskframe, maskframe), axis=-1)
+                seg = denseCRF.densecrf(img, prob, param)
+                
+                M[i,0] = seg
+            M = M.transpose(0, 2, 3, 1).astype(np.bool)
+           
+            r = np.sum(Y[::skip] & M)/np.sum(Y[::skip] | M)
+            res.append(r)
+            params.append(param)
+
+        res = np.array(res)
+        order = np.argsort(res)
+        res = res[order]
+        params = np.array(params)[order]
+
+        mask[::skip] = M.transpose(0,3,1,2)
+        return (mask >= 1)
 
 def get_iou(G, T):
     tp = np.sum(G & T) # intersection i.e. true positive
     fn = np.sum(G & np.logical_not(T)) # false negative
     fp = np.sum(np.logical_not(G) & T) # false positive
     
-    iou = tp / (tp + fn + fp) # intersection div by union
+    if tp+fn+fp == 0: # 0 out of 0 correctly classified pixels is equivalent to IoU=1
+        iou = 1 # so avoid dividing by zero
+    else:
+        iou = tp / (tp + fn + fp) # intersection div by union
     
     iou = round(iou, 3)
-    fn_rate = round(fn / np.sum(G), 3)
-    fp_rate = round(fp / np.sum(np.logical_not(G)), 3)
     
-    return iou, fn_rate, fp_rate
+    return iou
 
 def load_textured_minerl():
     evaldatapath = "critic-guided/red-trees/"
@@ -46,10 +84,10 @@ def load_textured_minerl():
     return text_dset, gt_dset
 
 # source: https://github.com/python-pillow/Pillow/issues/4263
-def create_video(trajectory, masks=True):
+def create_video(frames):
     print('creating video...')
     byteframes = []
-    for f in trajectory[0]:
+    for f in frames:
         byte = BytesIO()
         byteframes.append(byte)
         f.save(byte, format="GIF")
@@ -94,101 +132,107 @@ def get_diff_factor(max_values):
 
     return diff_factor, mean_max
 
-def save_bin_info(bins, bin_frame_count, gt_true_count, gt_mean, second):
-    if second:
-        num = '2'
-    else:
-        num = '1'
+def save_bin_info_file(bin_ious, bin_frames, bin_gts):
+    total_gt = np.sum(list(bin_gts.values()))
 
-    total_gt = np.sum(list(gt_true_count.values()))
-
-    with open(f'bin_info_vae{num}.txt', 'w') as f:
+    with open(f'bin_info_vae1.txt', 'w') as f:
         f.write('ground truth pixels sorted by bin:\n')
-        for value_bin in gt_true_count:
-            count = gt_true_count[value_bin]
+        for value_bin in bin_gts:
+            count = bin_gts[value_bin]
             f.write(f'bin: {value_bin}, pixels = {count} = {round(count/total_gt, 2) * 100}%\n')
 
-        f.write('\nground truth mean and std:\n')
-        for value_bin in gt_mean:
-            mean = round(np.mean(gt_mean[value_bin]), 2)
-            std = round(np.nanstd(gt_mean[value_bin]), 2)
-            f.write(f'bin: {value_bin}, mean = {mean}, std={std}\n')
-
         f.write('\nframes separated by bin:\n')
-        for value_bin in bin_frame_count:
-            count = bin_frame_count[value_bin]
+        for value_bin in bin_frames:
+            count = bin_frames[value_bin]
             f.write(f'bin: {value_bin}, frames = {count} = {round(count/1200, 2) * 100}%\n')
 
-        f.write('\nbin-mean and std:\n')
-        for value_bin in bins:
-            mean = round(np.nanmean(bins[value_bin]), 2)
-            std = round(np.nanstd(bins[value_bin]), 2)
+        f.write('\niou-mean and std:\n')
+        for value_bin in bin_ious:
+            mean = round(statistics.mean(bin_ious[value_bin]), 2)
+            std = round(statistics.stdev(bin_ious[value_bin]), 2)
             f.write(f'bin: {value_bin}, iou_mean={mean}, iou_std={std}\n')
 
-def eval_textured_frames(trajectory, vae, critic, gt, second=False, t=THRESHOLD):
-    print('processing frames...')
-    ret = []
-    imgs = []
-    results = []
-    diff_max_values = []
-    for i, frame in enumerate(trajectory):
-        frame = preprocess_observation(frame)
+def save_bin_info(preds, gt, thr_masks):
+    bin_ious = defaultdict(lambda: [], {})
+    bin_frames = defaultdict(lambda: 0, {})
+    bin_gts = defaultdict(lambda: 0, {})
 
-        preds = critic.evaluate(frame)
+    for i, pred in enumerate(preds):
+        value_bin = round(pred.item(), 1)
+        thr_iou = get_iou(thr_masks[i], gt[i])
 
-        ro, rz, diff, max_value = get_diff_image(vae, frame, preds[0])
-        diff_max_values.append(max_value)
+        bin_ious[value_bin].append(thr_iou)
+        bin_frames[value_bin] += 1
+        bin_gts[value_bin] += gt[i].sum()
+    
+    save_bin_info_file(bin_ious, bin_frames, bin_gts)
 
-        imgs.append([frame, ro, rz, diff, preds[0], gt[i]])
 
-    ious = []
-    fn_rates = []
-    fp_rates = []
-    separated_bins = {}
-    separated_bins = defaultdict(lambda: [], separated_bins)
-    bin_frame_count = {}
-    bin_frame_count = defaultdict(lambda: 0, bin_frame_count)
-    gt_true_count = {}
-    gt_true_count = defaultdict(lambda: 0, bin_frame_count)
-    gt_mean = {}
-    gt_mean = defaultdict(lambda: [], bin_frame_count)
+def get_diff_and_thr_masks(diff_masks, max_values, thr=THRESHOLD):
+    thr_masks = []
 
-    diff_factor, mean_max = get_diff_factor(diff_max_values)
-
-    for img in imgs:
-        diff = prepare_diff(img[3], diff_factor, mean_max)
+    diff_factor, mean_max = get_diff_factor(max_values)
+    for i, diff in enumerate(diff_masks):
+        diff = prepare_diff(diff, diff_factor, mean_max)
         diff = (diff * 255).astype(np.uint8)
-        diff_img = Image.fromarray(diff)
 
-        thresholded = diff > t
-        gt = img[5]
+        thr_mask = diff > thr
+        thr_masks.append(thr_mask)
+        diff_masks[i] = diff
+    
+    return np.array(diff_masks), np.array(thr_masks)
 
-        iou, fn_rate, fp_rate = get_iou(gt, thresholded)
-        ious.append(iou)
-        fn_rates.append(fn_rate)
-        fp_rates.append(fp_rate)
+def eval_textured_frames(trajectory, vae, critic, gt, t=THRESHOLD):
+    print('processing frames...')
+    one_recons = []
+    zero_recons = []
+    diff_masks = [] # unnormalized yet
+    preds = []
+    frames = []
+    max_values = []
 
-        thresh_img = Image.fromarray(thresholded)
-        gt_img = Image.fromarray(gt)
+    for image in trajectory:
+        frame = preprocess_observation(image)
+        pred = critic.evaluate(frame)
+        ro, rz, diff, max_value = get_diff_image(vae, frame, pred[0])
 
-        value_bin = round(img[4].item(), 1)
-        separated_bins[value_bin].append(iou)
-        bin_frame_count[value_bin] += 1
-        gt_true_count[value_bin] += gt.sum()
-        gt_mean[value_bin].append(gt.sum())
+        one_recons.append(ro)
+        zero_recons.append(rz)
+        diff_masks.append(diff)
+        max_values.append(max_value)
+        preds.append(pred[0])
+        frames.append(frame)
 
-        result_img = save_diff_image(img[0], img[1], img[2], diff_img, img[4], gt_img, thresh_img)
-        results.append(result_img)
+    diff_masks, thr_masks = get_diff_and_thr_masks(diff_masks, max_values, thr=t)
+    thr_iou = get_iou(gt, thr_masks)
 
-    save_bin_info(separated_bins, bin_frame_count, gt_true_count, gt_mean, second=second)
+    crf_imgs = trajectory[:, np.newaxis, ...]
+    crf_diff_mask = np.array(thr_masks)[:, np.newaxis, ...].astype(np.float32)
+    crf_gt = gt[..., np.newaxis]
 
-    final_iou = np.nanmean(ious)
-    final_fn_rate = np.nanmean(fn_rates)
-    final_fp_rate = np.nanmean(fp_rates)
+    crf_masks = crf(crf_imgs, crf_diff_mask, crf_gt).squeeze()
+    crf_iou = get_iou(gt, crf_masks)
 
-    ret.append(results)
+    ret = []
+    for i, frame in enumerate(frames):
+        final_frame = get_final_frame(
+            frame,
+            one_recons[i],
+            zero_recons[i],
+            Image.fromarray(diff_masks[i]),
+            preds[i],
+            gt_img=Image.fromarray(gt[i]),
+            thr_img=Image.fromarray(thr_masks[i]),
+            crf_img=Image.fromarray(crf_masks[i]),
+            thr_iou=thr_iou,
+            crf_iou=crf_iou
+        )
 
-    return ret, final_iou, final_fn_rate, final_fp_rate
+        ret.append(final_frame)
+
+    save_bin_info(preds, gt, thr_masks)
+
+    return ret, thr_iou, crf_iou
 
 def collect_frames(trajectory_names): # returns list of (64, 64, 3) images for each trajectory
     print('collecting frames...')
@@ -262,7 +306,7 @@ def prepare_diff(diff_img, diff_factor, mean_max):
 
     return diff_img
 
-def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred, gt_img=None, thresh_img=None):
+def get_final_frame(img_tensor, recon_one, recon_zero, diff_img, pred, gt_img=None, thr_img=None, crf_img=None, thr_iou=None, crf_iou=None):
     conc_h = np.array(np.concatenate((
         to_np(img_tensor.view(-1, ch, w, w)[0]),
         recon_one,
@@ -271,17 +315,32 @@ def save_diff_image(img_tensor, recon_one, recon_zero, diff_img, pred, gt_img=No
 
     _, conc_img = prepare_rgb_image(conc_h)        
     
-    factor = 4 if gt_img is None else 6
+    with_masks = gt_img is not None
 
-    img = Image.new('RGB', (w*factor, w))
-    img.paste(conc_img, (0, 0))
-    img.paste(diff_img, (w*3, 0))
-    if factor == 6:
-        img.paste(thresh_img, (w*4, 0))
-        img.paste(gt_img, (w*5, 0))
+    image_count = 7 if with_masks else 4
+    height = w*2 if with_masks else w
+    ih = w if with_masks else 0 # image height
+    width = w*image_count
+
+    img = Image.new('RGB', (width, height))
+    draw = ImageDraw.Draw(img)
+    img.paste(conc_img, (0, ih))
+    img.paste(diff_img, (w*3, ih))
+    if with_masks:
+        img.paste(thr_img, (w*4, ih))
+        img.paste(crf_img, (w*5, ih))
+        img.paste(gt_img, (w*6, ih))
+
+        for i, title in enumerate(titles):
+            if (i == 4):
+                title += f"\niou={thr_iou}"
+            elif (i == 5):
+                title += f"\niou={crf_iou}"
+                
+            draw.text((w*i+2, 0), title, (255,255,255), font=font)
 
     draw = ImageDraw.Draw(img)
-    draw.text((2, 2), f'{pred.item():.1f}', (255,255,255), font=font)
+    draw.text((2, ih+2), f'{pred.item():.1f}', (255,255,255), font=font)
 
     return img
 
