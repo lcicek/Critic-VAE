@@ -39,7 +39,7 @@ VIDEO = args.video
 MASKS = args.masks
 
 def train(autoencoder, dset, logger=None):
-    #frames, gt_frames = load_textured_minerl()
+    frames, gt_frames = load_textured_minerl()
     dset = np.stack(dset).squeeze()
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
@@ -58,7 +58,7 @@ def train(autoencoder, dset, logger=None):
             preds = critic.evaluate(images)
             opt.zero_grad()
 
-            out = autoencoder(images, preds[0])
+            out = autoencoder(images, preds)
 
             losses = autoencoder.vae_loss(out[0], out[1], out[2], out[3])
             loss = losses['total_loss']
@@ -71,11 +71,11 @@ def train(autoencoder, dset, logger=None):
                 if logger is not None:
                     log_info(losses, logger, batch_i, ep, num_samples)
 
-        #vae.eval()
-        #with torch.no_grad():
-        #    _, iou, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
-        #    print(f"epoch {ep} has iou={iou} and fnr={fnr}, fpr={fpr}")
-        #vae.train()
+        vae.eval()
+        with torch.no_grad():
+            _, iou, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
+            print(f"epoch {ep} has iou={iou} and fnr={fnr}, fpr={fpr}")
+        vae.train()
 
     return autoencoder
 
@@ -147,7 +147,7 @@ if VIDEO or DEBUG:
     # get images from second vae
     vae = VariationalAutoencoder().to(device) # new
     load_vae_network(vae, second_vae=True)
-    #critic = load_critic(SECOND_CRITIC_PATH)
+    critic = load_critic(CRITIC_PATH)
 
     if args.tt:
         for t in range(0, 130, 10):

@@ -8,6 +8,7 @@ bin: 0.7, pixels = 174809 = 31.0%
 bin: 0.3, pixels = 16603 = 3.0%
 bin: 0.2, pixels = 8801 = 2.0%
 bin: 0.1, pixels = 6908 = 1.0%
+
 ground truth mean and std:
 bin: 0.4, mean = 351.82, std=464.42
 bin: 0.5, mean = 464.56, std=470.96
@@ -31,12 +32,12 @@ bin: 0.2, frames = 138 = 12.0%
 bin: 0.1, frames = 140 = 12.0%
 
 bin-mean and std:
-bin: 0.4, iou_mean=0.15, iou_std=0.15
-bin: 0.5, iou_mean=0.2, iou_std=0.15
-bin: 0.6, iou_mean=0.27, iou_std=0.19
-bin: 0.8, iou_mean=0.33, iou_std=0.13
-bin: 0.9, iou_mean=0.45, iou_std=0.02
-bin: 0.7, iou_mean=0.29, iou_std=0.15
-bin: 0.3, iou_mean=0.06, iou_std=0.1
-bin: 0.2, iou_mean=0.02, iou_std=0.04
-bin: 0.1, iou_mean=0.01, iou_std=0.03
+bin: 0.4, iou_mean=0.14, iou_std=0.13
+bin: 0.5, iou_mean=0.17, iou_std=0.12
+bin: 0.6, iou_mean=0.24, iou_std=0.17
+bin: 0.8, iou_mean=0.26, iou_std=0.11
+bin: 0.9, iou_mean=0.33, iou_std=0.04
+bin: 0.7, iou_mean=0.24, iou_std=0.15
+bin: 0.3, iou_mean=0.06, iou_std=0.08
+bin: 0.2, iou_mean=0.01, iou_std=0.03
+bin: 0.1, iou_mean=0.0, iou_std=0.02

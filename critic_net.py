@@ -58,64 +58,6 @@ class Critic(nn.Module):
         else:
             return pred
 
-    # toff = turn off; if false then multiply values by coeff. instead of setting to zero
-    def forward_ch(self, X, alter_layer, alter_ch, toff):       
-        count = 1 # layer 1
-
-        for layer in list(self.features):
-            X = layer(X)
-
-            if isinstance(layer, nn.Conv2d):
-                if alter_layer == count:
-                    size = 2 ** (7 - alter_layer) if alter_layer != 5 else 1 # L1 => 64 = 2^6...; L5 is an exception
-                    
-                    if toff:
-                        X[0][alter_ch] = torch.zeros(size, size) # set channel to 0
-                    else:
-                        torch.mul(X[0][alter_ch], 5) # !! might have to change it to other number than 5
-
-                count = count + 1
-
-        pred = self.crit(X)
-
-        return pred
-
-    def forward_ch_collect(self, X, alter_layer, alter_ch, toff):
-        count = 1 # layer 1
-        embeds = []
-        finished = False
-
-        for layer in list(self.features):
-            if finished:
-                break
-            
-            X = layer(X)
-
-            if count < 4 and isinstance(layer, nn.Conv2d):
-                if alter_layer == count:
-                    size = 2 ** (7 - alter_layer) if alter_layer != 5 else 1 # L1 => 64 = 2^6...; L5 is an exception
-                        
-                    if toff:
-                        X[0][alter_ch] = torch.zeros(size, size) # set channel to 0
-                    else:
-                        torch.mul(X[0][alter_ch], 5) # !! might have to change it to other number than 5
-
-                count = count + 1
-
-            if isinstance(layer, nn.ReLU):
-                embeds.append(X)
-
-                if count == 4: # if count is 4, then 3 conv layers have been processed already
-                    finished = True # so finished is true, since we just look at L1,2,3
-
-            #if isinstance(layer, type(self.pool)):
-             #   embeds.append(X)
-
-              #  if count == 4:
-               #     finished = True
-
-        return embeds
-
     def preprocess(self, X: Tensor):
         # X = X.T.unsqueeze(0)
         return (X / 255.0).permute(0, 3, 1, 2).float()
@@ -125,12 +67,3 @@ class Critic(nn.Module):
         with torch.no_grad():
             # X = self.preprocess(X)
             return self.forward(X, collect=False)
-
-    def eval_channels(self, X, alter_layer, alter_channel, toff, collect=False): # toff = turn off 
-        with torch.no_grad():
-            # X = self.preprocess(X)
-
-            if collect:
-                return self.forward_ch_collect(X, alter_layer, alter_channel, toff)
-            else:
-                return self.forward_ch(X, alter_layer, alter_channel, toff)

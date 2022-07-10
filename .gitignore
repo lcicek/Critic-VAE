@@ -6,8 +6,9 @@ images
 aae-images
 saved_models
 unused_files
-plot_dataset.pt
 images_mssim_loss_kld=0005
 recon-dataset.pickle
 second-vae-images
 videos/*
+*.pt
+*.txt

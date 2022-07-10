@@ -83,15 +83,15 @@ class VariationalEncoder(nn.Module):
                         nn.Conv2d(dims[2], dims[3], k, step, p), # to 8x8x256
                         nn.BatchNorm2d(dims[3]),
                         nn.MaxPool2d(2), # to 4x4x256
-                        nn.ReLU(),
+                        nn.Tanh(),
                     )
 
-        self.fcs = nn.Sequential(
-            nn.Linear(bottleneck, bottleneck),
-            nn.ReLU(),
-            nn.Linear(bottleneck, bottleneck),
-            nn.ReLU()
-        )
+        #self.fcs = nn.Sequential(
+        #    nn.Linear(bottleneck, bottleneck),
+        #    nn.Tanh(),
+        #    nn.Linear(bottleneck, bottleneck),
+        #    nn.Tanh()
+        #)
 
         # mu = mean, sigma = var; "fc" = fully connected layer
         self.fc_mu = nn.Linear(bottleneck, latent_dim)
@@ -102,7 +102,7 @@ class VariationalEncoder(nn.Module):
             x = layer(x)
 
         z_flat = torch.flatten(x, start_dim=1)
-        z_flat = self.fcs(z_flat)
+        #z_flat = self.fcs(z_flat)
 
         mu = self.fc_mu(z_flat)
         log_var = self.fc_var(z_flat)

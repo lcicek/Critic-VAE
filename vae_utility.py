@@ -222,7 +222,7 @@ def get_injected_img(autoencoder, img_tensor, pred):
 
     conc_h = np.concatenate((
         to_np(img_tensor.view(-1, ch, w, w)[0]),
-        to_np(orig_recon.view(-1, ch, w, w)[0]),
+        #to_np(orig_recon.view(-1, ch, w, w)[0]),
     ), axis=2)
 
     conc_recons = np.concatenate([to_np(recons[i].view(-1, ch, w, w)[0]) for i in range(inject_n)], axis=2)
@@ -384,22 +384,29 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
             pred = critic.evaluate(obs)
             pred = pred[0]
 
-            if recon_dset:
-                if pred <= 0.3:
-                    continue
-                
-                obs_high = vae.evaluate(obs, torch.zeros(1).to(device) + pred)                
+            if recon_dset:                
+                obs_pred = vae.evaluate(obs, torch.zeros(1).to(device) + pred)                
                 obs_low = vae.evaluate(obs, torch.zeros(1).to(device))
-                #obs = reverse_preprocess(obs)
+
+                obs_pred = obs_pred.detach().cpu().numpy()
+                obs_low = obs_low.detach().cpu().numpy()
+
 
                 #print(f'memory:: high:{torch.cuda.memory_allocated(obs_high)}, low:{torch.cuda.memory_allocated(obs_low)}, obs: {torch.cuda.memory_allocated(obs)}')
 
-                if c_mid >= collect * 2:
+                if c_high >= collect and c_low >= collect and c_mid >= collect:
                     break
-                else:
-                    dset.append(obs_high.detach().cpu().numpy())
-                    dset.append(obs_low.detach().cpu().numpy())
+                elif 0.4 <= pred <= 0.6 and c_mid < collect:
+                    dset.append(obs_pred)
+                    dset.append(obs_low)
                     c_mid += 1
+                elif pred >= 0.7 and c_high < collect:
+                    dset.append(obs_pred)
+                    c_high += 1
+                elif pred <= 0.25 and c_low < collect:
+                    dset.append(obs_low)
+                    #dset.append(obs_low)
+                    c_low += 1
             else:
                 obs = obs.detach().cpu().numpy()
 
@@ -408,7 +415,7 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
                 elif 0.4 <= pred <= 0.6 and c_mid < collect:
                     dset.append(obs)
                     c_mid += 1
-                elif pred >= 0.75 and c_high < collect:
+                elif pred >= 0.7 and c_high < collect:
                     dset.append(obs)
                     c_high += 1
                 elif pred <= 0.25 and c_low < collect:
