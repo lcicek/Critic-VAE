@@ -12,6 +12,7 @@ import argparse
 import os
 import pickle
 import statistics
+from logger import Logger
 
 from vae_parameters import *
 from vae_nets import *
@@ -60,12 +61,6 @@ def train(autoencoder, dset, logger=None):
                 
                 if logger is not None:
                     log_info(losses, logger, batch_i, ep, num_samples)
-
-        vae.eval()
-        with torch.no_grad():
-            _, iou, fnr, fpr = eval_textured_frames(frames, vae, critic, gt_frames)
-            print(f"epoch {ep} has iou={iou} and fnr={fnr}, fpr={fpr}")
-        vae.train()
 
     return autoencoder
 
@@ -151,9 +146,9 @@ else: # REGULAR VAE
     critic = load_critic(CRITIC_PATH)
 
     if args.train:
-        #logger = Logger('./logs/vae' + str(time())[-5::])
+        logger = Logger('./logs/vae' + str(time())[-5::])
         dset = load_minerl_data(critic)
-        vae = train(vae, dset)
+        vae = train(vae, dset, logger=logger)
 
         torch.save(vae.encoder.state_dict(), ENCODER_PATH)
         torch.save(vae.decoder.state_dict(), DECODER_PATH)

@@ -55,10 +55,11 @@ class VariationalAutoencoder(nn.Module):
         torch.cuda.empty_cache()
         recon_loss = self.mssim_loss(recon, x)
         kld_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu ** 2 - logvar.exp(), dim = 1), dim = 0)
-        
-        loss = recon_loss + kld_loss * kld_weight
+        kld_loss *= kld_weight
 
-        return {'total_loss': loss, 'recon_loss':recon_loss.detach(), 'KLD':-kld_loss.detach()}
+        loss = recon_loss + kld_loss
+
+        return {'total_loss': loss, 'recon_loss':recon_loss.detach(), 'KLD':kld_loss.detach()}
 
 class VariationalEncoder(nn.Module):
     def __init__(self, dims):

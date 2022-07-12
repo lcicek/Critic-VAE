@@ -85,6 +85,13 @@ def load_textured_minerl():
 
 # source: https://github.com/python-pillow/Pillow/issues/4263
 def create_video(frames):
+    count = 200
+    for i, frame in enumerate(frames): # save first "count" images
+        if i > count:
+            break
+
+        frame.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
+
     print('creating video...')
     byteframes = []
     for f in frames:
