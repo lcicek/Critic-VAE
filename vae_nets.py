@@ -146,7 +146,7 @@ class Decoder(nn.Module):
 
         return X
 
-# from: https://github.com/AntixK/PyTorch-VAE
+# copied from: https://github.com/AntixK/PyTorch-VAE
 class MSSIM(nn.Module):
 
     def __init__(self,

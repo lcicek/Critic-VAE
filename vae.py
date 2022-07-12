@@ -1,5 +1,7 @@
-# SOURCE: https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py
-import sys
+# sources:
+# basic structure: https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py
+# how to load minerl data: https://github.com/KarolisRam/MineRL2021-Research-baselines/blob/main/standalone/Behavioural_cloning.py#L38
+
 import torch; torch.manual_seed(0)
 from torch import Tensor, t
 import torch.utils
@@ -12,12 +14,11 @@ import argparse
 import os
 import pickle
 import statistics
-from logger import Logger
 
+from logger import Logger
 from vae_parameters import *
 from vae_nets import *
 from vae_utility import *
-#from logger import Logger
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-train', action='store_true') # train

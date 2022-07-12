@@ -1,7 +1,5 @@
 from io import BytesIO
 import os
-import sys
-from tkinter import image_names
 import minerl
 import statistics
 import torch
@@ -20,6 +18,7 @@ THRESHOLD = 50
 font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf", 10)
 titles = ["orig img\n+crit val", "crit val\ninjected", "crit=0\ninjected", "difference\nmask", f"thr-mask\nthr={THRESHOLD}", "thr-mask +\ncrf", "ground\ntruth"]
 
+# copied from critic-code, source and github link are listed in bachelor thesis
 def crf(imgs, mask, Y, skip=1):
         mask = mask.copy()
         
@@ -100,38 +99,6 @@ def create_video(frames):
         f.save(byte, format="GIF")
     imgs = [Image.open(byteframe) for byteframe in byteframes]
     imgs[0].save(f"videos/video-threshold={THRESHOLD}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=imgs[1:])
-
-def concat_frames(trajs1, trajs2, masks=False, ious=None):
-    print('concatting frames...')
-    all_conc = []
-    
-    for i in range(len(trajs1)):
-        conc_frames = []
-        frames1 = trajs1[i]
-        frames2 = trajs2[i]
-
-        for j in range(len(frames1)):
-            f1 = frames1[j] # f = frame
-            f2 = frames2[j]
-
-            factor = 6 if masks else 4
-            conc_f = Image.new('RGB', (w*factor, w*3))
-
-            if masks:
-                draw = ImageDraw.Draw(conc_f)
-                for i, title in enumerate(titles):
-                    if (i == 5):
-                        title += f"\niou1={ious[0]:03f}\niou2={ious[1]:03f}"
-                    draw.text((w*i+2, 0), title, (255,255,255), font=font)
-
-            conc_f.paste(f1, (0, w))
-            conc_f.paste(f2, (0, w*2))
-
-            conc_frames.append(conc_f)
-
-        all_conc.append(conc_frames)
-
-    return all_conc
 
 def get_diff_factor(max_values):
     mean_max = statistics.mean(max_values)
@@ -456,7 +423,6 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
 
                 obs_pred = obs_pred.detach().cpu().numpy()
                 obs_low = obs_low.detach().cpu().numpy()
-
 
                 #print(f'memory:: high:{torch.cuda.memory_allocated(obs_high)}, low:{torch.cuda.memory_allocated(obs_low)}, obs: {torch.cuda.memory_allocated(obs)}')
 
