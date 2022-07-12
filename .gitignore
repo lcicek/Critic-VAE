@@ -1,9 +1,7 @@
-data
 logs
 __pycache__
 images
 recon-dataset.pickle
-second-vae-images
 videos/*
 critic-guided/
 *.pt
