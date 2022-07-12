@@ -1,14 +1,9 @@
 data
 logs
 __pycache__
-__pycache__/*
 images
-aae-images
-saved_models
-unused_files
-images_mssim_loss_kld=0005
 recon-dataset.pickle
 second-vae-images
 videos/*
+critic-guided/
 *.pt
-*.txt
