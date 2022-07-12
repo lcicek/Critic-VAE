@@ -22,14 +22,14 @@ inject_n = 6
 ### PATHS ###
 ENCODER_PATH = 'vae_encoder.pt'
 DECODER_PATH = 'vae_decoder.pt'
-EVAL_IMAGES_PATH = '/homes/lcicek/Desktop/Critic-VAE/source-images'
-SAVE_PATH = '/homes/lcicek/Desktop/Critic-VAE/images'
-SAVE_DATASET_PATH = '/homes/lcicek/Desktop/Critic-VAE/recon-dataset.pickle'
+EVAL_IMAGES_PATH = 'source-images/'
+SAVE_PATH = 'images/'
+SAVE_DATASET_PATH = 'recon-dataset.pickle'
 
 SECOND_ENCODER_PATH = 'vae2_encoder.pt'
 SECOND_DECODER_PATH = 'vae2_decoder.pt'
 
-CRITIC_PATH = '/homes/lcicek/Desktop/Critic-VAE/saved-networks/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=99999-shift=12-chfak=1-dropout=0.3.pt'
-SECOND_CRITIC_PATH = '/homes/lcicek/Desktop/Critic-VAE/saved-networks/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=100000-shift=12-chfak=1-dropout=0.3.pt'
+CRITIC_PATH = 'saved-networks/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=99999-shift=12-chfak=1-dropout=0.3.pt'
+SECOND_CRITIC_PATH = 'saved-networks/critic-rewidx=1-cepochs=15-datamode=trunk-datasize=100000-shift=12-chfak=1-dropout=0.3.pt'
 
 MINERL_DATA_ROOT_PATH = '/homes/lcicek/anaconda3/envs/vae/lib/python3.6/site-packages/minerl'
