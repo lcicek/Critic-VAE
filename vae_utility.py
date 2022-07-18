@@ -68,10 +68,9 @@ def get_iou(G, T):
     return iou
 
 def load_textured_minerl():
-    evaldatapath = "critic-guided/red-trees/"
-    text_dset = np.load(evaldatapath + "X.npy") # / 255.0
+    text_dset = np.load(MINERL_EPISODE_PATH + "X.npy") # / 255.0
 
-    gt_dset = np.expand_dims(np.all(np.load(evaldatapath + "Y.npy"), axis=-1), axis=-1)
+    gt_dset = np.expand_dims(np.all(np.load(MINERL_EPISODE_PATH + "Y.npy"), axis=-1), axis=-1)
 
     text_dset = text_dset[100:5000:2]
     

@@ -28,6 +28,7 @@ SAVE_PATH = 'images/'
 INJECT_PATH = 'inject/'
 VIDEO_PATH = 'videos/'
 SAVE_DATASET_PATH = 'recon-dataset.pickle'
+MINERL_EPISODE_PATH = 'minerl-episode/'
 
 SECOND_ENCODER_PATH = 'vae2_encoder.pt'
 SECOND_DECODER_PATH = 'vae2_decoder.pt'
