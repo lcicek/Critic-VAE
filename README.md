@@ -15,6 +15,7 @@
 ###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>python vae.py</mark>
 ##### 3. To create the mask-video shown above (results can be found in <mark>'videos/'</mark>), run:
 ###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>python vae.py -video</mark>
+##### _The original minerl-episode is minerl-episode/X.npy and the ground-truth masks are minerl-episode/Y.npy, which are np.arrays containing the 1200 episode images._
 
 ## Other functions of the model:
 ##### 1. To create a dataset of the reconstructions of the Critic-VAE, run:
