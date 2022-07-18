@@ -1,6 +1,6 @@
 logs
 __pycache__
-images
+images/*
 recon-dataset.pickle
 videos/*
 critic-guided/

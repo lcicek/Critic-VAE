@@ -67,12 +67,16 @@ def train(autoencoder, dset, logger=None):
 
 def image_evaluate(autoencoder, critic):
     print('evaluating source images...')
-    folder = os.listdir(EVAL_IMAGES_PATH)
+    folder = os.listdir(SOURCE_IMAGES_PATH)
+
+    if not os.path.exists(SAVE_PATH):
+        os.mkdir(SAVE_PATH)
+
     imgs = []
     diff_max_values = []
     for i, img_file in enumerate(folder):
         ### LOAD IMAGES AND PREPROCESS ###
-        orig_img = Image.open(f'{EVAL_IMAGES_PATH}/{img_file}')
+        orig_img = Image.open(f'{SOURCE_IMAGES_PATH}/{img_file}')
         img_array = adjust_values(orig_img)
         img_array = img_array.transpose(2, 0, 1) # HWC to CHW for critic
         img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW

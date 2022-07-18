@@ -84,21 +84,25 @@ def load_textured_minerl():
 
 # source: https://github.com/python-pillow/Pillow/issues/4263
 def create_video(frames):
-    count = 200
-    for i, frame in enumerate(frames): # save first "count" images
-        if i > count:
-            break
+    #count = 200
+    #for i, frame in enumerate(frames): # save first "count" images
+    #    if i > count:
+    #        break
 
-        frame.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
+    #    frame.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
 
     print('creating video...')
+
+    if not os.path.exists(VIDEO_PATH):
+        os.mkdir(VIDEO_PATH)
+
     byteframes = []
     for f in frames:
         byte = BytesIO()
         byteframes.append(byte)
         f.save(byte, format="GIF")
     imgs = [Image.open(byteframe) for byteframe in byteframes]
-    imgs[0].save(f"videos/video-threshold={THRESHOLD}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=imgs[1:])
+    imgs[0].save(f"{VIDEO_PATH}video-threshold={THRESHOLD}.gif", format='GIF', duration=100, save_all=True, loop=0, append_images=imgs[1:])
 
 def get_diff_factor(max_values):
     mean_max = statistics.mean(max_values)

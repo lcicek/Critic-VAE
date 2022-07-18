@@ -1,5 +1,5 @@
 import torch
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu' # maybe cuda instead of cuda:0
 #device = 'cpu'
 ### IMAGE DATA ###
 w = 64 # original image width
@@ -22,8 +22,10 @@ inject_n = 6
 ### PATHS ###
 ENCODER_PATH = 'vae_encoder.pt'
 DECODER_PATH = 'vae_decoder.pt'
-EVAL_IMAGES_PATH = 'source-images/'
+
+SOURCE_IMAGES_PATH = 'source-images/'
 SAVE_PATH = 'images/'
+VIDEO_PATH = 'videos/'
 SAVE_DATASET_PATH = 'recon-dataset.pickle'
 
 SECOND_ENCODER_PATH = 'vae2_encoder.pt'
