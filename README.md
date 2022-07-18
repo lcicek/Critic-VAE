@@ -1,7 +1,7 @@
 # Critic-Variational Autoencoder
 ![](https://github.com/lcicek/Critic-VAE/blob/master/video-showcase.gif)  
 <br/>
-Leverages the critic-model: ![Critic](https://github.com/ndrwmlnk/critic-guided-segmentation-of-rewarding-objects-in-first-person-views)
+Leverages the critic-model: [Critic](https://github.com/ndrwmlnk/critic-guided-segmentation-of-rewarding-objects-in-first-person-views)
 
 ## Setup:
 ##### 1. Clone this repository.
@@ -19,7 +19,7 @@ Leverages the critic-model: ![Critic](https://github.com/ndrwmlnk/critic-guided-
 ##### 5.3. Set MINERL_DATA_ROOT environment variable and download MineRLTreechop-v0 environment:
 ###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>MINERL_DATA_ROOT=PATH (replace PATH with yours)</mark>
 ###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>export MINERL_DATA_ROOT</mark>
-###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>python3 -m minerl.data.download "MineRLTreechop-v0" (command might differ, see: ![minerl-docs](https://minerl.io/docs/tutorials/data_sampling.html))</mark>
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;python3 -m minerl.data.download "MineRLTreechop-v0" (command might differ, see: [minerl-docs](https://minerl.io/docs/tutorials/data_sampling.html))
 ##### 5.4. Replace your PATH with MINERL_DATA_ROOT_PATH in vae_parameters.py.
 
 ## How to run this model:
