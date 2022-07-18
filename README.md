@@ -6,9 +6,21 @@ Leverages the critic-model: ![Critic](https://github.com/ndrwmlnk/critic-guided-
 ## Setup:
 ##### 1. Clone this repository.
 ##### 2. Create a conda environment with the necessary packages:
-###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>conda create --name ENV_NAME --file requirements.txt -c conda-forge -c pytorch</mark>
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>conda create --name critvae --file requirements.txt -c conda-forge -c pytorch</mark>
 ##### 3. Activate the conda environment:
-###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>conda activate ENV_NAME</mark>
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>conda activate critvae</mark>
+##### 3. Separately install ![SimpleCRF](https://github.com/HiLab-git/SimpleCRF):
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>pip install SimpleCRF</mark>
+##### 4. Separately install minerl:
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>pip install gym==0.19.0 minerl==0.3.6</mark>
+##### 5. Find MINERL_DATA_ROOT.
+##### 5.1. MINERL_DATA_ROOT should be located in anaconda-folder: anaconda3/envs/critvae/lib/python3.6/site-packages/minerl
+##### 5.2. Find _your_ complete PATH to the MINERL_DATA_ROOT.
+##### 5.3. Set MINERL_DATA_ROOT environment variable and download MineRLTreechop-v0 environment:
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>MINERL_DATA_ROOT=PATH</mark>
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>export MINERL_DATA_ROOT</mark>
+###### &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<mark>python3 -m minerl.data.download "MineRLTreechop-v0" (command might differ, see: ![minerl-docs](https://minerl.io/docs/tutorials/data_sampling.html))</mark>
+##### 5.4. Replace your PATH with MINERL_DATA_ROOT_PATH in vae_parameters.py.
 
 ## How to run this model:
 ##### 1. To train the model (results can be found in <mark>'saved-networks/'</mark>), run:
