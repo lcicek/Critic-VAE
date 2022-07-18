@@ -20,11 +20,12 @@ log_n = batch_size * 30  # data is logged every "log_n"-step
 inject_n = 6
 
 ### PATHS ###
-ENCODER_PATH = 'vae_encoder.pt'
-DECODER_PATH = 'vae_decoder.pt'
+ENCODER_PATH = 'saved-networks/vae_encoder.pt'
+DECODER_PATH = 'saved-networks/vae_decoder.pt'
 
 SOURCE_IMAGES_PATH = 'source-images/'
 SAVE_PATH = 'images/'
+INJECT_PATH = 'inject/'
 VIDEO_PATH = 'videos/'
 SAVE_DATASET_PATH = 'recon-dataset.pickle'
 

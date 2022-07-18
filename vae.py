@@ -72,6 +72,9 @@ def image_evaluate(autoencoder, critic):
     if not os.path.exists(SAVE_PATH):
         os.mkdir(SAVE_PATH)
 
+    if args.inject and not os.path.exists(INJECT_PATH):
+        os.mkdir(INJECT_PATH)
+
     imgs = []
     diff_max_values = []
     for i, img_file in enumerate(folder):
@@ -86,7 +89,7 @@ def image_evaluate(autoencoder, critic):
 
         if args.inject:
             img = get_injected_img(autoencoder, img_tensor, pred[0])
-            img.save(f'{SAVE_PATH}/image-{i:03d}.png', format="png")
+            img.save(f'{INJECT_PATH}image-{i:03d}.png', format="png")
         else:
             ro, rz, diff, max_value = get_diff_image(autoencoder, img_tensor, pred[0])
             imgs.append([img_tensor,ro, rz, diff, pred[0]])
