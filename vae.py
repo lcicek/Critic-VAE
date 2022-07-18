@@ -117,9 +117,10 @@ if args.video:
     frames, gt_frames = load_textured_minerl() # gt = ground truth of tree trunk
 
     if args.thresh:
+        print('testing thresholds (thr):')
         for t in range(0, 130, 10):
             vae_frames, thr_iou, crf_iou = eval_textured_frames(frames, vae, critic, gt_frames, t=t)
-            print(f't={t}, thr_iou={thr_iou}, crf_iou={crf_iou}')
+            print(f'thr={t}, thr_iou={thr_iou}, crf_iou={crf_iou}')
     else:
         vae_frames, thr_iou, crf_iou = eval_textured_frames(frames, vae, critic, gt_frames)
         print(f'thr_iou={thr_iou}')

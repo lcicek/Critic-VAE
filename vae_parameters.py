@@ -16,6 +16,8 @@ bottleneck = 4096 # 4x4x256; bottleneck of convolutional layers
 latent_dim = 32 # fully-connected layer, from 4096 to 64 dim
 kld_weight = 0.001 # note: https://github.com/AntixK/PyTorch-VAE/issues/11 OR https://github.com/AntixK/PyTorch-VAE/issues/35
 
+total_images = 50000
+
 log_n = batch_size * 30  # data is logged every "log_n"-step
 inject_n = 6
 

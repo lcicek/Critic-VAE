@@ -401,12 +401,11 @@ def load_minerl_data(critic, recon_dset=False, vae=None):
     rng = np.random.default_rng(seed=0)
     rng.shuffle(trajectory_names)
     
-    total_img_count = 75000 if recon_dset else 50000
     collect = 150
     dset = []
     # Add trajectories to the data until we reach the required DATA_SAMPLES.
     for trajectory_name in trajectory_names:
-        if len(dset) >= total_img_count:
+        if len(dset) >= total_images: # total_images defined in vae_parameters.py
             break
 
         print(f'total images = {len(dset)}')
