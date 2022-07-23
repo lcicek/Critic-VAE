@@ -31,7 +31,7 @@ parser.add_argument('-thresh', action='store_true') # test threshold
 args = parser.parse_args()
 
 def train(autoencoder, dset, logger=None):
-    frames, gt_frames = load_textured_minerl()
+    #frames, gt_frames = load_textured_minerl()
     dset = np.stack(dset).squeeze()
     opt = torch.optim.Adam(autoencoder.parameters(), lr=lr) 
     num_samples = dset.shape[0]
@@ -47,7 +47,7 @@ def train(autoencoder, dset, logger=None):
             images = dset[batch_indices]
             images = Tensor(images).to(device)
             
-            preds = critic.evaluate(images)
+            preds = critic.evaluate(images) # preds can be replaced here. just use another value network than critic. shape of images might have to be changed. 
             opt.zero_grad()
 
             out = autoencoder(images, preds)
@@ -85,7 +85,7 @@ def image_evaluate(autoencoder, critic):
         img_array = img_array[np.newaxis, ...] # add batch_size = 1 to make it BCHW
         img_tensor = Tensor(img_array).to(device)
 
-        pred = critic.evaluate(img_tensor)
+        pred = critic.evaluate(img_tensor) # preds can be replaced here. just use another value network than critic. shape of images might have to be changed.
 
         if args.inject:
             img = get_injected_img(autoencoder, img_tensor, pred[0])
@@ -152,11 +152,11 @@ elif args.evalsecond:
     load_vae_network(vae, second_vae=True)
     image_evaluate(vae, critic)
 else: # REGULAR VAE
-    critic = load_critic(CRITIC_PATH)
+    critic = load_critic(CRITIC_PATH) # critic can be left out if using another value network.
 
     if args.train:
         logger = Logger('./logs/vae' + str(time())[-5::])
-        dset = load_minerl_data(critic)
+        dset = load_minerl_data(critic) # dataset can be replaced here. just make sure dset has the same shape and the images are preprocessed in the same way
         vae = train(vae, dset, logger=logger)
 
         torch.save(vae.encoder.state_dict(), ENCODER_PATH)
