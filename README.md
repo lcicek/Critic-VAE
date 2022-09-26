@@ -1,7 +1,7 @@
 # Critic-Variational Autoencoder
 ![](https://github.com/lcicek/Critic-VAE/blob/master/video-showcase.gif)  
 <br/>
-Leverages the critic-model: [Critic](https://github.com/ndrwmlnk/critic-guided-segmentation-of-rewarding-objects-in-first-person-views)
+Leverages the [Critic](https://github.com/ndrwmlnk/critic-guided-segmentation-of-rewarding-objects-in-first-person-views)-model
 
 ## Setup:
 ##### 1. Clone this repository.
