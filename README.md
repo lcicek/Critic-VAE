@@ -1,7 +1,8 @@
 # Critic-Variational Autoencoder
 ![](https://github.com/lcicek/Critic-VAE/blob/master/video-showcase.gif)  
 <br/>
-Leverages the [Critic](https://github.com/ndrwmlnk/critic-guided-segmentation-of-rewarding-objects-in-first-person-views)-model
+Leverages the [Critic](https://github.com/ndrwmlnk/critic-guided-segmentation-of-rewarding-objects-in-first-person-views)-model:
+The critic-value is a probability that serves as a prediction about whether a tree trunk is present in the image. This VAE-model is trained on the minerl-images and corresponding critic-predictions and yields a decoder that can (to a certain degree) enhance or remove tree trunks in an image.
 
 ## Setup:
 ##### 1. Clone this repository.
